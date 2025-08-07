@@ -1,0 +1,5 @@
+# Node.js
+node_modules/
+.env
+.DS_Store
+git remote add origin https://github.com/cadiguni/tic-tac-toe.git
