@@ -18,7 +18,20 @@
     <div class="celula" data-pos="7"></div>
     <div class="celula" data-pos="8"></div>
   </div>
-  <button id="reiniciar">🔄 Reiniciar Jogo</button>
+  <div id="chat" style="margin-top: 20px;">
+    <div id="mensagens" style="border: 1px solid #ccc; padding: 10px; height: 150px; overflow-y: auto;"></div>
+    <input type="text" id="mensagemInput" placeholder="Digite sua mensagem..." style="width: 80%;">
+    <button id="enviarMensagem">Enviar</button>
+  </div>
+
+  <div id="status" style="margin-top: 10px; font-weight: bold;"></div>
+  
+  <div id="controle-inicio">
+    <button id="comecaX">X começa</button>
+    <button id="comecaO">O começa</button>
+    <button id="reiniciar">🔄 Reiniciar Jogo</button>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
