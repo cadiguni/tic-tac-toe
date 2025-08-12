@@ -17,8 +17,9 @@ io.on('connection', (socket) => {
 
     socket.on('entrarSala', ({ salaId, nome }) => {
         if (!salas[salaId]) {
-            salas[salaId] = { jogadores: [], turno: 'X' };
+            salas[salaId] = { jogadores: [], turno: 'X', tabuleiro: Array(9).fill('') };
         }
+
 
         const sala = salas[salaId];
 
@@ -113,21 +114,22 @@ io.on('connection', (socket) => {
             console.error('Reiniciar recebido sem salaId');
             return;
         }
-      
+    
         const { salaId } = data;
-        const sala = salas.get(salaId); // Buscar a sala certa
-      
+        const sala = salas[salaId]; // ← corrigido
+    
         if (!sala) {
             console.error(`Sala ${salaId} não encontrada para reinício`);
             return;
         }
-      
-        // Reseta o turno para começar sempre com X
-        sala.turno = 'X';
+    
+        // Garante que o tabuleiro existe
         sala.tabuleiro = Array(9).fill('');
+        sala.turno = 'X';
         
         io.to(salaId).emit('resetar');
     });
+
 
     socket.on('disconnect', () => {
         console.log('Jogador desconectado:', socket.id);
