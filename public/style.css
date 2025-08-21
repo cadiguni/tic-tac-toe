@@ -1,31 +1,62 @@
 body {
-    font-family: sans-serif;
-    text-align: center;
-  }
-  
-  .tabuleiro {
-    display: grid;
-    grid-template-columns: repeat(3, 100px);
-    margin: 20px auto;
-    gap: 5px;
-  }
-  
-  .celula {
-    width: 100px;
-    height: 100px;
-    border: 2px solid #000;
-    font-size: 2em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-
-#container {
-  margin-top: 50px; /* ⬅️ Aumente esse valor se quiser mais espaço */
+  font-family: sans-serif;
+  text-align: center;
+  background-color: #111; /* já que parece que você usa tema escuro */
+  color: white;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  margin: 0;
 }
-  
+
+h1 {
+  margin-top: 20px;
+}
+
+.tabuleiro {
+  display: grid;
+  grid-template-columns: repeat(3, 100px);
+  gap: 5px;
+  margin: 40px auto; /* isso centraliza horizontalmente */
+  justify-content: center; /* garante que fique no meio */
+}
+
+.celula {
+  width: 100px;
+  height: 100px;
+  border: 2px solid #aaa;
+  font-size: 2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: #222;
+}
+
+#chat {
+  margin-top: 20px;
+  width: 350px;   /* largura fixa */
+  max-width: 90%; /* responsivo em telas menores */
+}
+
+#mensagens {
+  border: 1px solid #ccc;
+  padding: 10px;
+  height: 200px;
+  overflow-y: auto;
+  background-color: #222;
+  text-align: left;
+}
+
+#mensagemInput {
+  width: 70%;
+  padding: 5px;
+}
+
+#enviarMensagem {
+  padding: 5px 10px;
+  margin-left: 5px;
+  cursor: pointer;
+}
