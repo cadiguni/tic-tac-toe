@@ -33,7 +33,6 @@ btnComecaO.addEventListener('click', () => {
 function desabilitarBotoesInicio() {
   btnComecaX.disabled = true;
   btnComecaO.disabled = true;
-  
   // Apaga só os botões de início
   btnComecaX.style.opacity = '0.5';
   btnComecaO.style.opacity = '0.5';
