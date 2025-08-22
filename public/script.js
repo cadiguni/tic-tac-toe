@@ -33,7 +33,10 @@ btnComecaO.addEventListener('click', () => {
 function desabilitarBotoesInicio() {
   btnComecaX.disabled = true;
   btnComecaO.disabled = true;
-  document.getElementById('controle-inicio').style.opacity = '0.5';
+  
+  // Apaga só os botões de início
+  btnComecaX.style.opacity = '0.5';
+  btnComecaO.style.opacity = '0.5';
 }
 
 let meuSimbolo = null;
@@ -93,9 +96,12 @@ function resetarTabuleiro() {
   celulas.forEach(c => c.textContent = '');
   minhaVez = (meuSimbolo === 'X');
   simboloEscolhido = false;
+
   btnComecaX.disabled = false;
   btnComecaO.disabled = false;
-  document.getElementById('controle-inicio').style.opacity = '1';
+
+  btnComecaX.style.opacity = '1';
+  btnComecaO.style.opacity = '1';
 }
 
 socket.on('resetar', () => {

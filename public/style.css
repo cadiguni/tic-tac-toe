@@ -60,3 +60,44 @@ h1 {
   margin-left: 5px;
   cursor: pointer;
 }
+
+#controle-inicio {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px; /* espaço entre botões */
+  justify-content: center;
+}
+
+#controle-inicio button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  background-color: #444;
+  color: white;
+  transition: background 0.3s, transform 0.1s;
+}
+
+#controle-inicio button:hover:not(:disabled) {
+  background-color: #666;
+  transform: scale(1.05);
+}
+
+/* Botões desabilitados (só X começa e O começa) */
+#controle-inicio button:disabled {
+  background-color: #222;
+  color: #777;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Botão reiniciar SEMPRE ativo */
+#reiniciar {
+  background-color: #1e90ff;
+  color: white;
+}
+
+#reiniciar:hover {
+  background-color: #006ad1;
+}
