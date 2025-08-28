@@ -3,6 +3,11 @@ const http = require('http');
 const socketIO = require('socket.io');
 const { nanoid } = require('nanoid'); // Versão 3.x compatível com require
 
+// Banco de dados
+const connectDB = require('./db/db');
+const Partida = require('./models/Partida');
+connectDB();
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
@@ -119,12 +124,22 @@ io.on('connection', (socket) => {
     
         if (venceu) {
             io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `🏆 ${jogador.nome} (${jogador.simbolo}) venceu!` });
+        
+            // 📌 Salvar no Mongo
+            const partida = new Partida({
+                salaId,
+                jogadores: sala.jogadores.map(j => j.nome),
+                vencedor: jogador.nome
+            });
+            partida.save().then(() => console.log('📌 Partida salva'));
+        
             setTimeout(() => {
                 sala.tabuleiro = Array(9).fill('');
                 sala.turno = 'X';
                 io.to(salaId).emit('resetar');
             }, 3000);
         }
+
     });
 
 
