@@ -125,14 +125,34 @@ io.on('connection', (socket) => {
         if (venceu) {
             io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `🏆 ${jogador.nome} (${jogador.simbolo}) venceu!` });
         
-            // 📌 Salvar no Mongo
+            // 📌 Salvar no Mongo + atualizar ranking
             const partida = new Partida({
                 salaId,
                 jogadores: sala.jogadores.map(j => j.nome),
                 vencedor: jogador.nome
             });
-            partida.save().then(() => console.log('📌 Partida salva'));
         
+            partida.save().then(async () => {
+                console.log('📌 Partida salva');
+            
+                // Atualiza ranking global
+                const ranking = await Partida.aggregate([
+                    { $group: { _id: "$vencedor", vitorias: { $sum: 1 } } },
+                    { $sort: { vitorias: -1 } }
+                ]);
+            
+                // Envia ranking atualizado para todos
+                io.emit('rankingAtualizado', ranking);
+            });
+        
+            setTimeout(() => {
+                sala.tabuleiro = Array(9).fill('');
+                sala.turno = 'X';
+                io.to(salaId).emit('resetar');
+            }, 3000);
+        }
+        else if (sala.tabuleiro.every(c => c !== '')) {
+            io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: 'Empate!' });
             setTimeout(() => {
                 sala.tabuleiro = Array(9).fill('');
                 sala.turno = 'X';
@@ -198,5 +218,21 @@ io.on('connection', (socket) => {
         }
     });
 });
+
+
+// 📌 Rota REST para ver ranking global
+app.get('/ranking', async (req, res) => {
+  try {
+    const ranking = await Partida.aggregate([
+      { $group: { _id: "$vencedor", vitorias: { $sum: 1 } } },
+      { $sort: { vitorias: -1 } }
+    ]);
+    res.json(ranking);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Erro ao buscar ranking");
+  }
+});
+
 
 server.listen(3000, () => console.log('Servidor rodando em http://localhost:3000'));

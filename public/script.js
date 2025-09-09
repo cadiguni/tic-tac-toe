@@ -80,7 +80,7 @@ celulas.forEach(celula => {
 socket.on('jogada', data => {
   const celula = document.querySelector(`.celula[data-pos='${data.pos}']`);
   celula.textContent = data.simbolo;
-  if (data.nome !== nome) alert(`${data.nome} jogou na posição ${data.pos}`);
+ // if (data.nome !== nome) alert(`${data.nome} jogou na posição ${data.pos}`);
 });
 
 // Recebe o símbolo e define quem começa
