@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo da Velha - Home</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: white;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 500px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 40px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    h1 {
+      font-size: 3em;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .btn {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    .btn-primary {
+      background: linear-gradient(45deg, #4CAF50, #45a049);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+
+    .input-group {
+      margin: 20px 0;
+    }
+
+    .input-group input {
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      font-size: 1em;
+      width: 200px;
+      text-align: center;
+    }
+
+    .input-group input::placeholder {
+      color: rgba(255,255,255,0.6);
+    }
+
+    .stats {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 Jogo da Velha</h1>
+    <p class="subtitle">Jogue online com seus amigos!</p>
+    
+    <div class="buttons">
+      <a href="/nova-sala" class="btn btn-primary">
+        🚀 Criar Nova Sala
+      </a>
+      
+      <div class="input-group">
+        <input type="text" id="salaInput" placeholder="Nome da sala..." maxlength="20">
+        <br><br>
+        <button onclick="entrarSala()" class="btn btn-secondary">
+          🏠 Entrar em Sala
+        </button>
+      </div>
+      
+      <a href="/ranking" class="btn btn-secondary">
+        🏆 Ver Ranking
+      </a>
+      
+      <a href="/estatisticas" class="btn btn-secondary">
+        📊 Estatísticas
+      </a>
+    </div>
+    
+    <div class="stats">
+      <p>💡 <strong>Dica:</strong> Compartilhe o link da sala para convidar amigos!</p>
+    </div>
+  </div>
+
+  <script>
+    function entrarSala() {
+      const salaInput = document.getElementById('salaInput');
+      const sala = salaInput.value.trim();
+      
+      if (!sala) {
+        alert('Digite o nome da sala!');
+        return;
+      }
+      
+      // Redirecionar para a sala
+      window.location.href = `/sala/${sala}`;
+    }
+    
+    // Enter para entrar na sala
+    document.getElementById('salaInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        entrarSala();
+      }
+    });
+  </script>
+</body>
+</html>

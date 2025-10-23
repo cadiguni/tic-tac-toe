@@ -68,6 +68,11 @@ function verificarRateLimit(socketId, tipo = 'chat', limite = 5, janela = 60000)
     return true;
 }
 
+// Página inicial
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/home.html');
+});
+
 // Criar nova sala e redirecionar
 app.get('/criarSala', (req, res) => {
     const salaId = nanoid(6);
@@ -406,11 +411,17 @@ io.on('connection', (socket) => {
 // 📌 Rota REST para ver ranking global
 app.get('/ranking', async (req, res) => {
   try {
-    const ranking = await Partida.aggregate([
-      { $group: { _id: "$vencedor", vitorias: { $sum: 1 } } },
-      { $sort: { vitorias: -1 } }
-    ]);
-    res.json(ranking);
+    // Se for uma requisição AJAX (Accept: application/json), retorna JSON
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+      const ranking = await Partida.aggregate([
+        { $group: { _id: "$vencedor", vitorias: { $sum: 1 } } },
+        { $sort: { vitorias: -1 } }
+      ]);
+      res.json(ranking);
+    } else {
+      // Senão, serve a página HTML
+      res.sendFile(__dirname + '/public/ranking.html');
+    }
   } catch (err) {
     console.error(err);
     res.status(500).send("Erro ao buscar ranking");
@@ -463,4 +474,24 @@ app.get('/nova-sala', (req, res) => {
 });
 
 
-server.listen(3000, () => console.log('Servidor rodando em http://localhost:3000'));
+server.listen(3000, () => {
+    console.log('🎮 Servidor rodando em:');
+    console.log('   Local:   http://localhost:3000');
+    
+    // Tentar mostrar IP local para facilitar acesso de outras máquinas
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    
+    for (const name of Object.keys(interfaces)) {
+        for (const interface of interfaces[name]) {
+            if (interface.family === 'IPv4' && !interface.internal) {
+                console.log(`   Rede:    http://${interface.address}:3000`);
+                break;
+            }
+        }
+    }
+    
+    console.log('\n📋 Para criar nova sala: http://localhost:3000/nova-sala');
+    console.log('📊 Estatísticas: http://localhost:3000/estatisticas');
+    console.log('🏆 Ranking: http://localhost:3000/ranking');
+});

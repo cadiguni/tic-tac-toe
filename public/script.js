@@ -32,10 +32,12 @@ function atualizarSalaInfo() {
 
 // Copiar link da sala
 copiarLinkBtn.addEventListener('click', async () => {
+  // window.location.origin já pega o protocolo e host corretos (http://192.168.1.100:3000, etc)
   const link = window.location.origin + '/sala/' + salaId;
+  
   try {
     await navigator.clipboard.writeText(link);
-    mostrarToast('Link copiado!', 'success');
+    mostrarToast(`Link copiado: ${link}`, 'success');
   } catch (err) {
     // Fallback para navegadores antigos
     const textarea = document.createElement('textarea');
@@ -44,7 +46,7 @@ copiarLinkBtn.addEventListener('click', async () => {
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
-    mostrarToast('Link copiado!', 'success');
+    mostrarToast(`Link copiado: ${link}`, 'success');
   }
 });
 
