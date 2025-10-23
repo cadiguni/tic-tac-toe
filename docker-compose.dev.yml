@@ -1,0 +1,27 @@
+# 🐳 Docker Compose - Desenvolvimento
+# Use para desenvolvimento local (dados não persistem)
+version: '3.8'
+
+services:
+  # Aplicação do jogo
+  jogo:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/jogo-da-velha
+      - NODE_ENV=development
+    depends_on:
+      - mongo
+    volumes:
+      # Sincroniza código em tempo real
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # MongoDB sem persistência (para testes)
+  mongo:
+    image: mongo:5.0
+    ports:
+      - "27017:27017"
+    # Sem volumes = dados perdidos ao parar

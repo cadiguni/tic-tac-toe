@@ -1,0 +1,18 @@
+# 🐳 Docker Compose - Apenas o Jogo
+# Use quando você já tem MongoDB rodando (local ou cloud)
+version: '3.8'
+
+services:
+  # Apenas a aplicação do jogo
+  jogo:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # MongoDB externo - configure conforme necessário
+      - MONGODB_URI=${MONGODB_URI:-mongodb://host.docker.internal:27017/jogo-da-velha}
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Para conectar em MongoDB local da máquina host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

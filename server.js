@@ -12,6 +12,10 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// Configurações
+const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
 app.use(express.static('public'));
 
 // Estado das salas
@@ -474,24 +478,27 @@ app.get('/nova-sala', (req, res) => {
 });
 
 
-server.listen(3000, () => {
+server.listen(PORT, () => {
     console.log('🎮 Servidor rodando em:');
-    console.log('   Local:   http://localhost:3000');
+    console.log(`   Local:   http://localhost:${PORT}`);
     
-    // Tentar mostrar IP local para facilitar acesso de outras máquinas
-    const os = require('os');
-    const interfaces = os.networkInterfaces();
-    
-    for (const name of Object.keys(interfaces)) {
-        for (const interface of interfaces[name]) {
-            if (interface.family === 'IPv4' && !interface.internal) {
-                console.log(`   Rede:    http://${interface.address}:3000`);
-                break;
+    if (NODE_ENV === 'development') {
+        // Tentar mostrar IP local para facilitar acesso de outras máquinas
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        
+        for (const name of Object.keys(interfaces)) {
+            for (const interface of interfaces[name]) {
+                if (interface.family === 'IPv4' && !interface.internal) {
+                    console.log(`   Rede:    http://${interface.address}:${PORT}`);
+                    break;
+                }
             }
         }
     }
     
-    console.log('\n📋 Para criar nova sala: http://localhost:3000/nova-sala');
-    console.log('📊 Estatísticas: http://localhost:3000/estatisticas');
-    console.log('🏆 Ranking: http://localhost:3000/ranking');
+    console.log(`\n📋 Para criar nova sala: http://localhost:${PORT}/nova-sala`);
+    console.log(`📊 Estatísticas: http://localhost:${PORT}/estatisticas`);
+    console.log(`🏆 Ranking: http://localhost:${PORT}/ranking`);
+    console.log(`🌍 Ambiente: ${NODE_ENV}`);
 });
