@@ -69,6 +69,30 @@ socket.on('mensagemChat', ({ nome, texto }) => {
   mensagens.scrollTop = mensagens.scrollHeight;
 });
 
+const rankingLista = document.getElementById('ranking');
+
+// Atualiza ranking ao vivo quando servidor mandar
+socket.on('rankingAtualizado', (ranking) => {
+  atualizarRanking(ranking);
+});
+
+// Função para atualizar ranking na tela
+function atualizarRanking(ranking) {
+  rankingLista.innerHTML = '';
+  ranking.forEach((item, index) => {
+    const li = document.createElement('li');
+    li.textContent = `${index + 1}º ${item._id} - ${item.vitorias} vitórias`;
+    rankingLista.appendChild(li);
+  });
+}
+
+// Carrega ranking inicial ao entrar
+fetch('/ranking')
+  .then(res => res.json())
+  .then(data => atualizarRanking(data))
+  .catch(err => console.error('Erro ao carregar ranking inicial:', err));
+
+
 // Clique em célula envia intenção de jogada
 celulas.forEach(celula => {
   celula.addEventListener('click', () => {
