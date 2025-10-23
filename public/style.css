@@ -1,103 +1,486 @@
 body {
-  font-family: sans-serif;
-  text-align: center;
-  background-color: #111; /* já que parece que você usa tema escuro */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
   color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 100vh;
   margin: 0;
+  padding: 20px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.game-container {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .game-container {
+    grid-template-columns: 2fr 1fr;
+    grid-template-areas: 
+      "header header"
+      "status status"
+      "game sidebar"
+      "controls sidebar";
+  }
 }
 
 h1 {
-  margin-top: 20px;
+  text-align: center;
+  margin: 0 0 20px 0;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  grid-area: header;
 }
 
+/* Status do jogo */
+#game-status {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+  grid-area: status;
+}
+
+#player-info, #turno-info, #sala-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+#sala-info:last-child {
+  margin-bottom: 0;
+}
+
+#meu-simbolo {
+  font-weight: bold;
+  font-size: 1.2em;
+}
+
+#conexao-status {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+#conexao-status.online {
+  color: #4CAF50;
+}
+
+#conexao-status.offline {
+  color: #f44336;
+}
+
+#turno-atual {
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.2);
+}
+
+#turno-atual.minha-vez {
+  background: #4CAF50;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+#copiar-link {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 1.2em;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background 0.3s;
+}
+
+#copiar-link:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* Tabuleiro */
 .tabuleiro {
   display: grid;
   grid-template-columns: repeat(3, 100px);
   gap: 5px;
-  margin: 40px auto; /* isso centraliza horizontalmente */
-  justify-content: center; /* garante que fique no meio */
+  justify-content: center;
+  margin: 20px auto;
+  grid-area: game;
+}
+
+@media (max-width: 480px) {
+  .tabuleiro {
+    grid-template-columns: repeat(3, 80px);
+  }
+  
+  .celula {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 1.5em !important;
+  }
 }
 
 .celula {
   width: 100px;
   height: 100px;
-  border: 2px solid #aaa;
+  border: 2px solid rgba(255,255,255,0.3);
   font-size: 2em;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background-color: #222;
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
 }
 
-#chat {
-  margin-top: 20px;
-  width: 350px;   /* largura fixa */
-  max-width: 90%; /* responsivo em telas menores */
+.celula:hover:empty {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
 
-#mensagens {
-  border: 1px solid #ccc;
-  padding: 10px;
-  height: 200px;
-  overflow-y: auto;
-  background-color: #222;
-  text-align: left;
+.celula.animate {
+  animation: cellClick 0.3s ease;
 }
 
-#mensagemInput {
-  width: 70%;
-  padding: 5px;
+@keyframes cellClick {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 
-#enviarMensagem {
-  padding: 5px 10px;
-  margin-left: 5px;
-  cursor: pointer;
-}
-
+/* Controles */
 #controle-inicio {
-  margin-top: 15px;
   display: flex;
-  gap: 10px; /* espaço entre botões */
+  gap: 10px;
   justify-content: center;
+  flex-wrap: wrap;
+  grid-area: controls;
+  margin: 20px 0;
 }
 
 #controle-inicio button {
-  padding: 8px 14px;
+  padding: 12px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: bold;
   cursor: pointer;
-  background-color: #444;
+  background: rgba(255,255,255,0.2);
   color: white;
-  transition: background 0.3s, transform 0.1s;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.3);
 }
 
 #controle-inicio button:hover:not(:disabled) {
-  background-color: #666;
-  transform: scale(1.05);
+  background: rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
 
-/* Botões desabilitados (só X começa e O começa) */
 #controle-inicio button:disabled {
-  background-color: #222;
-  color: #777;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5);
   cursor: not-allowed;
   transform: none;
 }
 
-/* Botão reiniciar SEMPRE ativo */
 #reiniciar {
-  background-color: #1e90ff;
-  color: white;
+  background: linear-gradient(45deg, #ff6b6b, #ee5a24) !important;
 }
 
 #reiniciar:hover {
-  background-color: #006ad1;
+  background: linear-gradient(45deg, #ee5a24, #ff6b6b) !important;
+}
+
+/* Sidebar */
+@media (min-width: 768px) {
+  #jogadores-online, #chat-section, #ranking-section, #historico-section {
+    grid-column: 2;
+  }
+}
+
+/* Jogadores online */
+#jogadores-online {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+#lista-jogadores {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jogador-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 5px;
+  border-left: 4px solid;
+}
+
+.jogador-item.jogador-x {
+  border-left-color: #ff6b6b;
+}
+
+.jogador-item.jogador-o {
+  border-left-color: #4ecdc4;
+}
+
+.jogador-status {
+  font-size: 0.8em;
+  opacity: 0.8;
+}
+
+/* Chat */
+#chat-section {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+#mensagens {
+  height: 200px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 5px;
+  padding: 10px;
+  margin-bottom: 10px;
+  text-align: left;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.3) transparent;
+}
+
+#mensagens::-webkit-scrollbar {
+  width: 6px;
+}
+
+#mensagens::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#mensagens::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.3);
+  border-radius: 3px;
+}
+
+#chat-input {
+  display: flex;
+  gap: 10px;
+}
+
+#mensagemInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+#mensagemInput::placeholder {
+  color: rgba(255,255,255,0.6);
+}
+
+#mensagemInput:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.5);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1);
+}
+
+#enviarMensagem {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+#enviarMensagem:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateY(-1px);
+}
+
+/* Ranking */
+#ranking-section {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+#ranking {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#ranking li {
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#ranking li:first-child {
+  background: linear-gradient(45deg, #ffd700, #ffed4e);
+  color: #333;
+  font-weight: bold;
+}
+
+#ranking li:nth-child(2) {
+  background: linear-gradient(45deg, #c0c0c0, #e8e8e8);
+  color: #333;
+}
+
+#ranking li:nth-child(3) {
+  background: linear-gradient(45deg, #cd7f32, #daa520);
+  color: white;
+}
+
+/* Histórico */
+#historico-section {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+#historico-lista {
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.3) transparent;
+}
+
+.historico-item {
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 5px;
+  border-left: 4px solid;
+  font-size: 0.9em;
+}
+
+.historico-item.vitoria {
+  border-left-color: #4CAF50;
+}
+
+.historico-item.derrota {
+  border-left-color: #f44336;
+}
+
+.historico-item.empate {
+  border-left-color: #ff9800;
+}
+
+/* Responsividade */
+@media (max-width: 767px) {
+  .game-container {
+    padding: 10px;
+  }
+  
+  #game-status {
+    padding: 10px;
+  }
+  
+  #player-info, #turno-info, #sala-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  #controle-inicio {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  #controle-inicio button {
+    width: 100%;
+    max-width: 250px;
+  }
+}
+
+/* Notificações toast */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0,0,0,0.9);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 5px;
+  z-index: 1000;
+  animation: slideIn 0.3s ease;
+}
+
+.toast.success {
+  background: #4CAF50;
+}
+
+.toast.error {
+  background: #f44336;
+}
+
+.toast.info {
+  background: #2196F3;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Loading */
+.loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

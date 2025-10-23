@@ -17,6 +17,57 @@ app.use(express.static('public'));
 // Estado das salas
 const salas = {};
 
+// Rate limiting para mensagens de chat
+const chatLimits = new Map();
+
+// Validação anti-trapaça
+function validarJogada(sala, jogador, pos) {
+    // Verificar se é turno do jogador
+    if (sala.turno !== jogador.simbolo) {
+        return { valida: false, erro: 'Não é sua vez!' };
+    }
+    
+    // Verificar se a posição é válida
+    if (pos < 0 || pos > 8) {
+        return { valida: false, erro: 'Posição inválida!' };
+    }
+    
+    // Verificar se a célula está vazia
+    if (sala.tabuleiro[pos] !== '') {
+        return { valida: false, erro: 'Posição já ocupada!' };
+    }
+    
+    // Verificar se o jogo ainda não terminou
+    if (sala.finalizada) {
+        return { valida: false, erro: 'Jogo já finalizado!' };
+    }
+    
+    return { valida: true };
+}
+
+function verificarRateLimit(socketId, tipo = 'chat', limite = 5, janela = 60000) {
+    const agora = Date.now();
+    const chave = `${socketId}-${tipo}`;
+    
+    if (!chatLimits.has(chave)) {
+        chatLimits.set(chave, []);
+    }
+    
+    const tentativas = chatLimits.get(chave);
+    
+    // Remove tentativas antigas
+    while (tentativas.length > 0 && tentativas[0] < agora - janela) {
+        tentativas.shift();
+    }
+    
+    if (tentativas.length >= limite) {
+        return false;
+    }
+    
+    tentativas.push(agora);
+    return true;
+}
+
 // Criar nova sala e redirecionar
 app.get('/criarSala', (req, res) => {
     const salaId = nanoid(6);
@@ -41,27 +92,72 @@ io.on('connection', (socket) => {
 
         // Cria a sala caso não exista
         if (!salas[salaId]) {
-            salas[salaId] = { jogadores: [], turno: 'X', tabuleiro: Array(9).fill('') };
+            salas[salaId] = { 
+                jogadores: [], 
+                turno: 'X', 
+                tabuleiro: Array(9).fill(''),
+                criadaEm: new Date(),
+                totalJogadas: 0
+            };
         }
 
         const sala = salas[salaId];
 
-        if (sala.jogadores.length >= 2) {
-            socket.emit('mensagem', 'Sala cheia!');
-            return;
+        // Verificar se é uma reconexão
+        const jogadorExistente = sala.jogadores.find(j => j.nome === nome);
+        
+        if (jogadorExistente) {
+            // Reconexão
+            jogadorExistente.id = socket.id;
+            jogadorExistente.online = true;
+            delete jogadorExistente.desconectadoEm;
+            socket.join(salaId);
+            
+            socket.emit('atribuirSimbolo', {
+                simbolo: jogadorExistente.simbolo,
+                comeca: sala.turno === jogadorExistente.simbolo
+            });
+            
+            io.to(salaId).emit('mensagemChat', { 
+                nome: 'Sistema', 
+                texto: `${nome} reconectou como ${jogadorExistente.simbolo}` 
+            });
+            
+            // Enviar estado atual do tabuleiro
+            sala.tabuleiro.forEach((valor, pos) => {
+                if (valor !== '') {
+                    socket.emit('jogada', { pos, simbolo: valor });
+                }
+            });
+            
+        } else {
+            // Nova conexão
+            if (sala.jogadores.filter(j => j.online).length >= 2) {
+                socket.emit('mensagem', 'Sala cheia!');
+                return;
+            }
+
+            const simbolo = sala.jogadores.length === 0 ? 'X' : 'O';
+            sala.jogadores.push({ 
+                id: socket.id, 
+                nome, 
+                simbolo, 
+                online: true,
+                ultimaAtividade: new Date()
+            });
+            socket.join(salaId);
+
+            socket.emit('atribuirSimbolo', {
+                simbolo,
+                comeca: sala.turno === simbolo
+            });
+
+            io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `${nome} entrou como ${simbolo}` });
+            console.log(`Jogador ${nome} entrou na sala ${salaId} como ${simbolo}`);
         }
 
-        const simbolo = sala.jogadores.length === 0 ? 'X' : 'O';
-        sala.jogadores.push({ id: socket.id, nome, simbolo });
-        socket.join(salaId);
-
-        socket.emit('atribuirSimbolo', {
-            simbolo,
-            comeca: sala.turno === simbolo
-        });
-
-        io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `${nome} entrou como ${simbolo}` });
-        console.log(`Jogador ${nome} entrou na sala ${salaId} como ${simbolo}`);
+        // Enviar lista de jogadores atualizada
+        io.to(salaId).emit('atualizarJogadores', sala.jogadores);
     });
 
 
@@ -87,21 +183,26 @@ io.on('connection', (socket) => {
     
         const jogador = sala.jogadores.find(j => j.id === socket.id);
         if (!jogador) return;
-    
-        // 1️⃣ Verifica se é turno do jogador
-        if (sala.turno !== jogador.simbolo) {
-            socket.emit('mensagem', 'Não é sua vez!');
+        
+        // Rate limiting para jogadas
+        if (!verificarRateLimit(socket.id, 'jogada', 10, 10000)) {
+            socket.emit('mensagem', 'Muitas jogadas muito rapidamente!');
             return;
         }
     
-        // 2️⃣ Verifica se a célula está vazia
-        if (sala.tabuleiro[pos] !== '') {
-            socket.emit('mensagem', 'Célula ocupada!');
+        // Validar jogada
+        const validacao = validarJogada(sala, jogador, parseInt(pos));
+        if (!validacao.valida) {
+            socket.emit('mensagem', validacao.erro);
             return;
         }
     
         // 3️⃣ Aplica a jogada no tabuleiro do servidor
         sala.tabuleiro[pos] = jogador.simbolo;
+        sala.totalJogadas = (sala.totalJogadas || 0) + 1;
+        
+        // Atualizar última atividade
+        jogador.ultimaAtividade = new Date();
     
         // 4️⃣ Envia a jogada para todos na sala
         io.to(salaId).emit('jogada', { pos, simbolo: jogador.simbolo, nome: jogador.nome });
@@ -123,13 +224,28 @@ io.on('connection', (socket) => {
         });
     
         if (venceu) {
+            sala.finalizada = true;
             io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `🏆 ${jogador.nome} (${jogador.simbolo}) venceu!` });
+            
+            // Emitir evento de vitória para cada jogador
+            sala.jogadores.forEach(j => {
+                io.to(j.id).emit('vitoria', {
+                    vencedor: jogador.nome,
+                    simbolo: jogador.simbolo,
+                    euVenci: j.id === jogador.id
+                });
+            });
         
             // 📌 Salvar no Mongo + atualizar ranking
+            const partidaDuracao = sala.criadaEm ? Math.floor((new Date() - sala.criadaEm) / 1000) : 0;
+            
             const partida = new Partida({
                 salaId,
                 jogadores: sala.jogadores.map(j => j.nome),
-                vencedor: jogador.nome
+                vencedor: jogador.nome,
+                dataPartida: new Date(),
+                duracao: partidaDuracao,
+                totalJogadas: sala.totalJogadas
             });
         
             partida.save().then(async () => {
@@ -148,14 +264,39 @@ io.on('connection', (socket) => {
             setTimeout(() => {
                 sala.tabuleiro = Array(9).fill('');
                 sala.turno = 'X';
+                sala.finalizada = false;
+                sala.totalJogadas = 0;
+                sala.criadaEm = new Date();
                 io.to(salaId).emit('resetar');
             }, 3000);
         }
         else if (sala.tabuleiro.every(c => c !== '')) {
-            io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: 'Empate!' });
+            sala.finalizada = true;
+            io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: '🤝 Empate!' });
+            
+            // Emitir evento de empate
+            io.to(salaId).emit('empate');
+            
+            // Salvar empate no banco
+            const partidaDuracao = sala.criadaEm ? Math.floor((new Date() - sala.criadaEm) / 1000) : 0;
+            
+            const partida = new Partida({
+                salaId,
+                jogadores: sala.jogadores.map(j => j.nome),
+                vencedor: 'Empate',
+                dataPartida: new Date(),
+                duracao: partidaDuracao,
+                totalJogadas: sala.totalJogadas
+            });
+            
+            partida.save();
+            
             setTimeout(() => {
                 sala.tabuleiro = Array(9).fill('');
                 sala.turno = 'X';
+                sala.finalizada = false;
+                sala.totalJogadas = 0;
+                sala.criadaEm = new Date();
                 io.to(salaId).emit('resetar');
             }, 3000);
         }
@@ -179,7 +320,23 @@ io.on('connection', (socket) => {
     });
 
     socket.on('mensagemChat', ({ salaId, nome, texto }) => {
-        io.to(salaId).emit('mensagemChat', { nome, texto });
+        // Rate limiting para chat
+        if (!verificarRateLimit(socket.id, 'chat', 10, 60000)) {
+            socket.emit('mensagem', 'Muitas mensagens muito rapidamente!');
+            return;
+        }
+        
+        // Validar entrada
+        if (!texto || texto.trim().length === 0) return;
+        if (texto.length > 200) {
+            socket.emit('mensagem', 'Mensagem muito longa!');
+            return;
+        }
+        
+        // Sanitizar texto básico
+        const textoLimpo = texto.trim().substring(0, 200);
+        
+        io.to(salaId).emit('mensagemChat', { nome, texto: textoLimpo });
     });
 
     socket.on('reiniciar', (data) => {
@@ -206,13 +363,39 @@ io.on('connection', (socket) => {
 
         for (const salaId in salas) {
             const sala = salas[salaId];
-            const index = sala.jogadores.findIndex(j => j.id === socket.id);
+            const jogador = sala.jogadores.find(j => j.id === socket.id);
 
-            if (index !== -1) {
-                const [removido] = sala.jogadores.splice(index, 1);
-                io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto: `${removido.nome} saiu da partida` });
-
-                if (sala.jogadores.length === 0) delete salas[salaId];
+            if (jogador) {
+                // Marcar como offline em vez de remover imediatamente
+                jogador.online = false;
+                jogador.desconectadoEm = new Date();
+                
+                io.to(salaId).emit('mensagemChat', { 
+                    nome: 'Sistema', 
+                    texto: `${jogador.nome} desconectou` 
+                });
+                
+                // Atualizar lista de jogadores
+                io.to(salaId).emit('atualizarJogadores', sala.jogadores);
+                
+                // Remover jogador após 30 segundos se não reconectar
+                setTimeout(() => {
+                    const index = sala.jogadores.findIndex(j => j.id === socket.id);
+                    if (index !== -1 && !sala.jogadores[index].online) {
+                        sala.jogadores.splice(index, 1);
+                        io.to(salaId).emit('mensagemChat', { 
+                            nome: 'Sistema', 
+                            texto: `${jogador.nome} saiu da partida` 
+                        });
+                        
+                        if (sala.jogadores.length === 0) {
+                            delete salas[salaId];
+                        } else {
+                            io.to(salaId).emit('atualizarJogadores', sala.jogadores);
+                        }
+                    }
+                }, 30000);
+                
                 break;
             }
         }
@@ -232,6 +415,51 @@ app.get('/ranking', async (req, res) => {
     console.error(err);
     res.status(500).send("Erro ao buscar ranking");
   }
+});
+
+// 📊 Rota para estatísticas globais
+app.get('/estatisticas', async (req, res) => {
+  try {
+    const totalPartidas = await Partida.countDocuments();
+    const partidasHoje = await Partida.countDocuments({
+      dataPartida: { $gte: new Date().setHours(0,0,0,0) }
+    });
+    
+    const duracaoMedia = await Partida.aggregate([
+      { $group: { _id: null, media: { $avg: "$duracao" } } }
+    ]);
+    
+    const jogadorMaisAtivo = await Partida.aggregate([
+      { $unwind: "$jogadores" },
+      { $group: { _id: "$jogadores", partidas: { $sum: 1 } } },
+      { $sort: { partidas: -1 } },
+      { $limit: 1 }
+    ]);
+    
+    res.json({
+      totalPartidas,
+      partidasHoje,
+      duracaoMediaSegundos: duracaoMedia[0]?.media || 0,
+      jogadorMaisAtivo: jogadorMaisAtivo[0] || null,
+      salasAtivas: Object.keys(salas).length
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Erro ao buscar estatísticas");
+  }
+});
+
+// 🏠 Rota para criar sala nova
+app.get('/nova-sala', (req, res) => {
+    const salaId = nanoid(6);
+    salas[salaId] = { 
+        jogadores: [], 
+        turno: 'X', 
+        tabuleiro: Array(9).fill(''),
+        criadaEm: new Date(),
+        totalJogadas: 0
+    };
+    res.redirect(`/sala/${salaId}`);
 });
 
 

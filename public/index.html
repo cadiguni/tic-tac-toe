@@ -2,11 +2,28 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jogo da Velha</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Jogo da Velha</h1>
+  <div class="game-container">
+    <h1>🎮 Jogo da Velha</h1>
+    
+    <!-- Status do jogo -->
+    <div id="game-status">
+      <div id="player-info">
+        <span id="meu-simbolo"></span>
+        <span id="conexao-status">🔗 Conectando...</span>
+      </div>
+      <div id="turno-info">
+        <span id="turno-atual">Aguardando jogadores...</span>
+      </div>
+      <div id="sala-info">
+        <span id="sala-id"></span>
+        <button id="copiar-link" title="Copiar link da sala">📋</button>
+      </div>
+    </div>
   <div class="tabuleiro">
     <div class="celula" data-pos="0"></div>
     <div class="celula" data-pos="1"></div>
@@ -18,28 +35,43 @@
     <div class="celula" data-pos="7"></div>
     <div class="celula" data-pos="8"></div>
   </div>
+
+  <div id="controle-inicio">
+    <button id="comecaX">❌ X começa</button>
+    <button id="comecaO">⭕ O começa</button>
+    <button id="reiniciar">🔄 Reiniciar Jogo</button>
+  </div>
+
+  <!-- Seção de jogadores -->
+  <div id="jogadores-online">
+    <h3>👥 Jogadores na Sala</h3>
+    <div id="lista-jogadores"></div>
+  </div>
   <!-- Chat -->
-  <div>
+  <div id="chat-section">
     <h3>💬 Chat</h3>
-    <div id="mensagens" style="height:200px; overflow-y:auto; border:1px solid #ccc; padding:5px;"></div>
-    <input type="text" id="mensagemInput" placeholder="Digite uma mensagem">
-    <button id="enviarMensagem">Enviar</button>
+    <div id="mensagens"></div>
+    <div id="chat-input">
+      <input type="text" id="mensagemInput" placeholder="Digite uma mensagem...">
+      <button id="enviarMensagem">📤</button>
+    </div>
   </div>
 
   <!-- Ranking -->
-  <div>
+  <div id="ranking-section">
     <h3>🏆 Ranking Global</h3>
     <ul id="ranking"></ul>
   </div>
-</div>
+
+  <!-- Histórico -->
+  <div id="historico-section">
+    <h3>📜 Histórico de Partidas</h3>
+    <div id="historico-lista"></div>
+  </div>
 
   <div id="status"></div>
 
-  <div id="controle-inicio">
-    <button id="comecaX">X começa</button>
-    <button id="comecaO">O começa</button>
-    <button id="reiniciar">🔄 Reiniciar Jogo</button>
-  </div>
+  </div> <!-- game-container -->
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
