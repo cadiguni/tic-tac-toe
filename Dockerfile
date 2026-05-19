@@ -1,25 +1,15 @@
-# 🐳 Deploy com Docker
-# Este arquivo permite rodar o jogo em qualquer VM facilmente
+FROM node:20-alpine
 
-# Dockerfile para containerizar a aplicação
-FROM node:18-alpine
-
-# Criar diretório de trabalho
 WORKDIR /app
 
-# Copiar package.json e instalar dependências
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --omit=dev
 
-# Copiar código da aplicação
 COPY . .
 
-# Expor porta
+ENV NODE_ENV=production
+ENV PORT=3000
+
 EXPOSE 3000
 
-# Variáveis de ambiente
-ENV NODE_ENV=production
-ENV MONGODB_URI=mongodb://mongo:27017/jogo-da-velha
-
-# Comando para iniciar
 CMD ["node", "server.js"]

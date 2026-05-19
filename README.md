@@ -1,66 +1,55 @@
-# 🕹️ Jogo da Velha Online com Node.js e Socket.IO
+# Tic-Tac-Toe Online
 
-Um jogo da velha multiplayer em tempo real, utilizando Node.js, Express e Socket.IO. Dois jogadores podem se conectar, jogar e reiniciar a partida diretamente pelo navegador.
+Multiplayer tic-tac-toe with Node.js, Express, Socket.IO and MongoDB.
 
-## 🚀 Tecnologias Utilizadas
+## Requirements
 
-- [Node.js](https://nodejs.org/)
-- [Express](https://expressjs.com/)
-- [Socket.IO](https://socket.io/)
-- HTML, CSS e JavaScript (lado cliente)
+- Docker Desktop (Windows/Mac) or Docker Engine + Compose plugin (Linux)
 
-## 📁 Estrutura do Projeto
+## Run with Docker
+
+### Full stack (recommended)
+
 ```bash
-jogo-da-velha/
-├── public/
-│ ├── index.html # Interface do jogo
-│ ├── style.css # Estilo do jogo
-│ └── script.js # Lógica do cliente (comunicação e jogadas)
-│
-├── server.js # Servidor Node.js com lógica do jogo
-└── README.md # Documentação do projeto
+docker compose up -d --build
 ```
 
----
+Services:
+- App: http://localhost:3000
+- Mongo Express: http://localhost:8081
 
-## ▶️ Como Executar o Projeto
+### App only (external MongoDB)
 
-1. Clone o repositório:
+Set your Mongo URI first:
 
-   ```bash
-   git clone https://github.com/seu-usuario/jogo-da-velha.git
-   cd jogo-da-velha
-   ```
+```bash
+# Linux/macOS
+export MONGODB_URI="mongodb://localhost:27017/jogo-da-velha"
 
-2. Instale as dependências:
+# Windows (PowerShell)
+$env:MONGODB_URI="mongodb://localhost:27017/jogo-da-velha"
+```
 
-    ```bash
-    npm install
-    ```
+Then start only the app service:
 
-3. Inicie o servidor:
- 
-    ```bash
-    node server.js
-    ```
+```bash
+docker compose up -d --build jogo
+```
 
-4. Abra dois navegadores (ou abas) e acesse:
-    ```bash
-    http://localhost:3000
-    ```
----
-## 💡 Funcionalidades
+### Development mode
 
-    Atribuição automática de símbolos (X e O)
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
 
-    Jogo em tempo real entre dois jogadores
+## Run helper scripts
 
-    Detecção de vitória ou empate
+- Windows: `deploy.bat`
+- Linux/macOS: `./deploy.sh`
 
-    Reinício automático após vitória
+## Stop
 
-    Botão de reiniciar manual
-
-📄 Licença
-
-Este projeto está licenciado sob a MIT License.
+```bash
+docker compose down
+docker compose -f docker-compose.dev.yml down
+```

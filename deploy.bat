@@ -1,65 +1,82 @@
 @echo off
-REM 🚀 Script de Deploy para Windows
-REM Execute este arquivo para fazer deploy com Docker no Windows
+setlocal
 
-echo 🎮 Iniciando deploy do Jogo da Velha...
+echo Tic-Tac-Toe deployment
 
-REM Verificar se Docker está instalado
-docker --version >nul 2>&1
+where docker >nul 2>nul
 if errorlevel 1 (
-    echo ❌ Docker não encontrado!
-    echo Instale o Docker Desktop: https://www.docker.com/products/docker-desktop
-    pause
-    exit /b 1
+  echo Docker not found. Install Docker Desktop and try again.
+  exit /b 1
 )
 
-REM Verificar se Docker Compose está disponível
-docker-compose --version >nul 2>&1
+docker compose version >nul 2>nul
 if errorlevel 1 (
-    echo ❌ Docker Compose não encontrado!
-    echo O Docker Compose vem incluído no Docker Desktop
-    pause
-    exit /b 1
+  echo Docker Compose plugin not found. Update Docker Desktop.
+  exit /b 1
 )
 
-echo ✅ Docker encontrado!
+echo.
+echo Choose an option:
+echo 1. Full stack ^(app + MongoDB + mongo-express^)
+echo 2. App only ^(external MongoDB via MONGODB_URI^)
+echo 3. Development ^(with bind mount^)
+echo 4. Stop everything
+set /p OPTION=Option (1-4): 
 
-REM Parar containers existentes
-echo 📦 Parando containers existentes...
-docker-compose down 2>nul
+if "%OPTION%"=="1" goto full
+if "%OPTION%"=="2" goto apponly
+if "%OPTION%"=="3" goto dev
+if "%OPTION%"=="4" goto stop
 
-REM Construir e iniciar
-echo 🔨 Construindo aplicação...
-docker-compose build
+echo Invalid option.
+exit /b 1
 
-echo 🚀 Iniciando serviços...
-docker-compose up -d
+:full
+echo Starting full stack...
+docker compose up -d --build
+if errorlevel 1 exit /b 1
 
-REM Aguardar inicialização
-echo ⏳ Aguardando inicialização...
-timeout /t 10 /nobreak >nul
+goto success
 
-REM Verificar se está rodando
-docker-compose ps | findstr "Up" >nul
-if errorlevel 1 (
-    echo ❌ Falha no deploy!
-    echo Ver logs: docker-compose logs
-    pause
-    exit /b 1
+:apponly
+if "%MONGODB_URI%"=="" (
+  echo MONGODB_URI is not set.
+  echo Example: set MONGODB_URI=mongodb://host.docker.internal:27017/jogo-da-velha
+  exit /b 1
 )
 
-echo ✅ Deploy realizado com sucesso!
+echo Starting app only...
+docker compose up -d --build jogo
+if errorlevel 1 exit /b 1
+
+goto success
+
+:dev
+echo Starting development environment...
+docker compose -f docker-compose.dev.yml up -d --build
+if errorlevel 1 exit /b 1
+
+goto success
+
+:stop
+echo Stopping full stack...
+docker compose down
+
+echo Stopping development stack...
+docker compose -f docker-compose.dev.yml down
+
+echo Done.
+exit /b 0
+
+:success
 echo.
-echo 🌐 Aplicação disponível em:
-echo    Local:     http://localhost:3000
-echo    Rede:      http://%COMPUTERNAME%:3000
+echo App: http://localhost:3000
+if "%OPTION%"=="1" echo Mongo Express: http://localhost:8081
+
 echo.
-echo 🗄️ MongoDB Admin: http://localhost:8081 (admin/admin123)
-echo.
-echo 📊 Comandos úteis:
-echo    Ver logs:     docker-compose logs -f
-echo    Parar:        docker-compose down
-echo    Reiniciar:    docker-compose restart
-echo    Status:       docker-compose ps
-echo.
-pause
+echo Useful commands:
+echo docker compose ps
+echo docker compose logs -f
+echo docker compose down
+
+endlocal
