@@ -155,6 +155,31 @@ jogadores na mesma sala recebem símbolos **diferentes**.
 > `HTTP 200` com HTML, sem checar **qual** página voltava. Um 200 não prova que a
 > página certa foi servida.
 
+### Correção: chat abaixo da dobra no desktop
+
+Reportado ao jogar: o tabuleiro ficava no meio da tela e era preciso rolar a
+página para escrever no chat.
+
+A barra lateral só tinha `grid-column: 2` e dependia de auto-posicionamento, o
+que empilhava jogadores → chat → ranking → histórico em linhas sucessivas,
+jogando o chat para fora da tela. Além disso `#modo-info` não tinha área
+nenhuma, e o container estava limitado a 800px num monitor de 1920px.
+
+- Áreas de grid explícitas: o chat agora ocupa três linhas **ao lado** do
+  tabuleiro, e os jogadores ficam no topo, junto do status.
+- `max-width` de 800px → 1200px no desktop.
+- Medido em 1920×1040: o campo de escrever do chat fica em y≈864, dentro da
+  primeira tela.
+- **Bug pré-existente encontrado junto**: os `grid-area` estavam declarados
+  globalmente, fora da media query. No layout de coluna única isso criava
+  colunas implícitas e causava **rolagem horizontal no celular** (390px
+  renderizava três colunas). Agora todas as áreas estão dentro do bloco de
+  desktop.
+- Removido `<div id="status">`, markup morto que nenhum código referenciava.
+
+Verificado renderizando de verdade (Edge via playwright-core) em 1920×1040,
+1280×800, 820×1180 e 390×844 — não só conferindo o CSS.
+
 ---
 
 ## 🔴 Prioridade alta

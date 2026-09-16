@@ -16,14 +16,63 @@ body {
   gap: 20px;
 }
 
-@media (min-width: 768px) {
+/*
+ * Layout de desktop.
+ *
+ * As áreas são todas explícitas de propósito: antes, a barra lateral só tinha
+ * `grid-column: 2` e dependia de auto-posicionamento, o que empurrava o chat
+ * para muito abaixo da dobra — era preciso rolar a página para conversar.
+ * Aqui o chat fica ao lado do tabuleiro, visível junto com o jogo.
+ */
+@media (min-width: 900px) {
   .game-container {
-    grid-template-columns: 2fr 1fr;
-    grid-template-areas: 
-      "header header"
-      "status status"
-      "game sidebar"
-      "controls sidebar";
+    max-width: 1200px;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    /* "jogadores" sobe para a linha do status e "chat" ocupa três linhas: assim
+       nenhuma caixa da lateral estica a linha do tabuleiro, e o chat ganha
+       altura em vez de deixar vão morto. */
+    grid-template-areas:
+      "header    header"
+      "status    jogadores"
+      "modo      chat"
+      "game      chat"
+      "controls  chat"
+      "ranking   historico";
+    column-gap: 24px;
+    align-items: start;
+  }
+
+  /* Todas as áreas ficam AQUI dentro: declaradas globalmente, elas criavam
+     colunas implícitas no layout de coluna única e causavam rolagem
+     horizontal no celular. */
+  h1                 { grid-area: header; }
+  #game-status       { grid-area: status; }
+  .tabuleiro         { grid-area: game; }
+  #controle-inicio   { grid-area: controls; }
+  #modo-info         { grid-area: modo; }
+  #jogadores-online  { grid-area: jogadores; }
+  #chat-section      { grid-area: chat; }
+  #ranking-section   { grid-area: ranking; }
+  #historico-section { grid-area: historico; }
+
+  /* O chat ocupa duas linhas ao lado do tabuleiro, então estica junto com elas */
+  #chat-section {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+
+  #mensagens {
+    flex: 1;
+    height: auto;
+    min-height: 240px;
+  }
+
+  #jogadores-online,
+  #ranking-section,
+  #historico-section {
+    margin-bottom: 0;
   }
 }
 
@@ -31,7 +80,6 @@ h1 {
   text-align: center;
   margin: 0 0 20px 0;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-  grid-area: header;
 }
 
 /* Status do jogo */
@@ -42,7 +90,6 @@ h1 {
   margin-bottom: 20px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,0.2);
-  grid-area: status;
 }
 
 #player-info, #turno-info, #sala-info {
@@ -114,7 +161,6 @@ h1 {
   gap: 5px;
   justify-content: center;
   margin: 20px auto;
-  grid-area: game;
 }
 
 @media (max-width: 480px) {
@@ -166,7 +212,6 @@ h1 {
   gap: 10px;
   justify-content: center;
   flex-wrap: wrap;
-  grid-area: controls;
   margin: 20px 0;
 }
 
@@ -204,12 +249,8 @@ h1 {
   background: linear-gradient(45deg, #ee5a24, #ff6b6b) !important;
 }
 
-/* Sidebar */
-@media (min-width: 768px) {
-  #jogadores-online, #chat-section, #ranking-section, #historico-section {
-    grid-column: 2;
-  }
-}
+/* A colocação na barra lateral é feita por grid-template-areas, no bloco de
+   desktop lá em cima. */
 
 /* Jogadores online */
 #jogadores-online {
@@ -407,8 +448,8 @@ h1 {
   border-left-color: #ff9800;
 }
 
-/* Responsividade */
-@media (max-width: 767px) {
+/* Responsividade — coluna única (abaixo do breakpoint de desktop) */
+@media (max-width: 899px) {
   .game-container {
     padding: 10px;
   }
