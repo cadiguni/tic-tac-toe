@@ -100,6 +100,50 @@
       font-size: 0.9em;
       opacity: 0.8;
     }
+
+    .modos {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .modo-card {
+      flex: 1;
+      cursor: pointer;
+      padding: 14px 10px;
+      border-radius: 12px;
+      border: 2px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.08);
+      transition: all 0.25s ease;
+      text-align: center;
+    }
+
+    .modo-card:hover {
+      background: rgba(255,255,255,0.16);
+    }
+
+    .modo-card input {
+      display: none;
+    }
+
+    .modo-card.ativo {
+      border-color: #4CAF50;
+      background: rgba(76,175,80,0.22);
+      transform: translateY(-2px);
+    }
+
+    .modo-card .titulo {
+      font-weight: bold;
+      font-size: 1.05em;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .modo-card .descricao {
+      font-size: 0.75em;
+      opacity: 0.85;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
@@ -107,11 +151,25 @@
     <h1>🎮 Jogo da Velha</h1>
     <p class="subtitle">Jogue online com seus amigos!</p>
     
+    <div class="modos">
+      <label class="modo-card ativo">
+        <input type="radio" name="modo" value="classico" checked>
+        <span class="titulo">🎯 Clássico</span>
+        <span class="descricao">Regras de sempre. As marcas ficam no tabuleiro e pode dar velha.</span>
+      </label>
+
+      <label class="modo-card">
+        <input type="radio" name="modo" value="infinito">
+        <span class="titulo">♾️ Infinito</span>
+        <span class="descricao">Cada jogador só mantém 3 marcas. A 4ª faz a mais antiga sumir — nunca dá velha.</span>
+      </label>
+    </div>
+
     <div class="buttons">
-      <a href="/nova-sala" class="btn btn-primary">
+      <a href="/nova-sala?modo=classico" id="criarSalaBtn" class="btn btn-primary">
         🚀 Criar Nova Sala
       </a>
-      
+
       <div class="input-group">
         <input type="text" id="salaInput" placeholder="Nome da sala..." maxlength="20">
         <br><br>
@@ -135,20 +193,34 @@
   </div>
 
   <script>
+    const criarSalaBtn = document.getElementById('criarSalaBtn');
+
+    function modoSelecionado() {
+      return document.querySelector('input[name="modo"]:checked').value;
+    }
+
+    // Destaque visual do cartão + link de criação sempre no modo escolhido
+    document.querySelectorAll('.modo-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.modo-card').forEach(c => c.classList.remove('ativo'));
+        card.classList.add('ativo');
+        criarSalaBtn.href = `/nova-sala?modo=${modoSelecionado()}`;
+      });
+    });
+
     function entrarSala() {
-      const salaInput = document.getElementById('salaInput');
-      const sala = salaInput.value.trim();
-      
+      const sala = document.getElementById('salaInput').value.trim();
+
       if (!sala) {
         alert('Digite o nome da sala!');
         return;
       }
-      
-      // Redirecionar para a sala
-      window.location.href = `/sala/${sala}`;
+
+      // O modo só é aplicado se a sala ainda não existir; caso contrário vale o
+      // modo com que ela foi criada.
+      window.location.href = `/sala/${encodeURIComponent(sala)}?modo=${modoSelecionado()}`;
     }
-    
-    // Enter para entrar na sala
+
     document.getElementById('salaInput').addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         entrarSala();
