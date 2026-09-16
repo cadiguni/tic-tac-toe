@@ -3,33 +3,61 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # 0.0.0.0 de propósito: é o que torna o jogo acessível pelos outros
+    # computadores da rede local.
     ports:
       - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/jogo-da-velha}
       PORT: 3000
+      # Sem segredo o servidor se recusa a subir. `npm run up` gera um no .env.
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env (rode "npm run up")}
+      # Em HTTP puro (rede local) precisa ficar false, senão o cookie não vai.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      # A imagem alpine não tem curl; o fetch global do Node 20+ resolve.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   mongo:
     image: mongo:7
+    # Publicado só no localhost: útil para abrir no Compass, sem expor o banco
+    # para a rede inteira.
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
+  # Painel do banco. Não sobe por padrão — use: docker compose --profile admin up -d
   mongo-express:
     image: mongo-express:latest
+    profiles: ["admin"]
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       ME_CONFIG_MONGODB_SERVER: mongo
       ME_CONFIG_MONGODB_PORT: 27017
       ME_CONFIG_BASICAUTH_USERNAME: ${ME_EXPRESS_USER:-admin}
       ME_CONFIG_BASICAUTH_PASSWORD: ${ME_EXPRESS_PASSWORD:-admin123}
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

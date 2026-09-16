@@ -14,6 +14,20 @@ function stub(caminho, exports) {
 
 const partidasSalvas = [];
 
+// Contas falsas em memória: nome em minúsculas -> conta
+const contas = new Map();
+
+function criarConta(nomeExibicao, id) {
+  const conta = {
+    _id: id,
+    nomeExibicao,
+    usuario: nomeExibicao.toLowerCase(),
+    paraCliente: () => ({ id, usuario: nomeExibicao.toLowerCase(), nomeExibicao })
+  };
+  contas.set(conta.usuario, conta);
+  return conta;
+}
+
 stub('../db/db', async () => {});
 stub('../models/Partida', {
   create: async (doc) => { partidasSalvas.push(doc); return doc; },
@@ -21,7 +35,20 @@ stub('../models/Partida', {
   countDocuments: async () => 0
 });
 
+const UsuarioStub = {
+  MIN_USUARIO: 3,
+  MAX_USUARIO: 20,
+  FORMATO_USUARIO: /^[a-zA-Z0-9._-]+$/,
+  exists: async (filtro) => (contas.has(filtro.usuario) ? { _id: 'existe' } : null),
+  findById: async (id) => [...contas.values()].find(c => c._id === String(id)) || null,
+  findOne: async (filtro) => contas.get(filtro.usuario) || null
+};
+stub('../models/Usuario', UsuarioStub);
+
+process.env.SESSION_SECRET = 'segredo-de-teste-integracao';
 process.env.PORT = '0';
+
+const { criarToken, NOME_COOKIE } = require('../auth/sessao');
 const { server, io, salas } = require('../server');
 
 const pronto = new Promise(resolve => {
@@ -34,9 +61,18 @@ async function baseUrl() {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-/** Cliente conectado, com um buffer dos eventos recebidos. */
-async function conectar() {
-  const socket = criarCliente(await baseUrl(), { transports: ['websocket'], forceNew: true });
+/**
+ * Cliente conectado, com um buffer dos eventos recebidos.
+ * Passando `conta`, o handshake leva o cookie de sessão daquela conta.
+ */
+async function conectar(conta = null) {
+  const opcoes = { transports: ['websocket'], forceNew: true };
+
+  if (conta) {
+    opcoes.extraHeaders = { Cookie: `${NOME_COOKIE}=${criarToken(conta._id)}` };
+  }
+
+  const socket = criarCliente(await baseUrl(), opcoes);
   const espera = new Map();
 
   const registrar = (evento) => {
@@ -260,4 +296,152 @@ test('o chat usa o nome do assento no servidor, não o que o cliente enviar', as
   const msg = await recebida;
   assert.strictEqual(msg.nome, 'Ana', 'o nome forjado no payload deve ser ignorado');
   assert.strictEqual(msg.texto, 'oi');
+});
+
+// ---------------------------------------------------------------------------
+// Identidade: conta x convidado
+// ---------------------------------------------------------------------------
+
+test('conta logada joga com o nome da conta, ignorando o nome enviado', async (t) => {
+  const conta = criarConta('Lucas', 'id-lucas');
+  const a = await conectar(conta);
+  t.after(() => { a.close(); contas.clear(); });
+
+  a.emit('entrarSala', { salaId: 'sala-conta', nome: 'OutroNomeQualquer' });
+  const atribuicao = await a.proximo('atribuirSimbolo');
+
+  assert.strictEqual(atribuicao.nome, 'Lucas', 'o nome deve vir da conta, não do payload');
+  assert.strictEqual(atribuicao.conta, true);
+
+  const estado = await a.proximo('estadoSala');
+  assert.strictEqual(estado.jogadores[0].nome, 'Lucas');
+  assert.strictEqual(estado.jogadores[0].conta, true, 'deve aparecer com selo de conta');
+});
+
+test('convidado entra sem cadastro e é marcado como convidado', async (t) => {
+  const a = await conectar();
+  t.after(() => { a.close(); contas.clear(); });
+
+  a.emit('entrarSala', { salaId: 'sala-convidado', nome: 'Visitante' });
+  const atribuicao = await a.proximo('atribuirSimbolo');
+
+  assert.strictEqual(atribuicao.conta, false);
+
+  const estado = await a.proximo('estadoSala');
+  assert.strictEqual(estado.jogadores[0].nome, 'Visitante');
+  assert.strictEqual(estado.jogadores[0].conta, false);
+});
+
+test('convidado não pode usar o nome de uma conta registrada', async (t) => {
+  criarConta('Lucas', 'id-lucas');
+  const impostor = await conectar();
+  t.after(() => { impostor.close(); contas.clear(); });
+
+  // Inclusive variando maiúsculas/minúsculas
+  impostor.emit('entrarSala', { salaId: 'sala-nome-tomado', nome: 'lucas' });
+  assert.match(await impostor.proximo('entradaRecusada'), /pertence a uma conta/i);
+
+  assert.strictEqual(salas['sala-nome-tomado'], undefined, 'nem deveria criar assento');
+});
+
+test('cookie de sessão inválido cai para convidado em vez de dar erro', async (t) => {
+  const socket = criarCliente(await baseUrl(), {
+    transports: ['websocket'],
+    forceNew: true,
+    extraHeaders: { Cookie: `${NOME_COOKIE}=token.totalmente.invalido` }
+  });
+  await new Promise(r => socket.once('connect', r));
+  t.after(() => { socket.close(); contas.clear(); });
+
+  const atribuicao = new Promise(r => socket.once('atribuirSimbolo', r));
+  socket.emit('entrarSala', { salaId: 'sala-cookie-ruim', nome: 'Fulano' });
+
+  assert.strictEqual((await atribuicao).conta, false);
+});
+
+test('vitória de conta grava vencedorId; de convidado grava null', async (t) => {
+  const conta = criarConta('Lucas', 'id-lucas');
+  const logado = await conectar(conta);
+  const convidado = await conectar();
+  t.after(() => { logado.close(); convidado.close(); contas.clear(); });
+
+  logado.emit('entrarSala', { salaId: 'sala-rank', nome: 'ignorado' });
+  await logado.proximo('atribuirSimbolo');
+  convidado.emit('entrarSala', { salaId: 'sala-rank', nome: 'Visitante' });
+  await convidado.proximo('atribuirSimbolo');
+
+  const jogar = async (quem, pos) => {
+    const p = quem.proximo('estadoSala', e => e.ultimaJogada && e.ultimaJogada.pos === pos);
+    quem.emit('jogada', { salaId: 'sala-rank', pos });
+    return p;
+  };
+
+  // Lucas (X) fecha 0-3-6
+  await jogar(logado, 0);
+  await jogar(convidado, 1);
+  await jogar(logado, 3);
+  await jogar(convidado, 2);
+
+  const fim = logado.proximo('vitoria');
+  logado.emit('jogada', { salaId: 'sala-rank', pos: 6 });
+  await fim;
+
+  const registro = partidasSalvas.find(p => p.salaId === 'sala-rank');
+  assert.ok(registro);
+  assert.strictEqual(registro.vencedor, 'Lucas');
+  assert.strictEqual(registro.vencedorId, 'id-lucas', 'vitória de conta entra no ranking');
+  assert.deepStrictEqual(registro.jogadoresIds, ['id-lucas'], 'só a conta tem id');
+});
+
+// ---------------------------------------------------------------------------
+// Roteamento das páginas
+//
+// Regressão: o express.static servia public/index.html na raiz, então "/"
+// entregava a tela de JOGO em vez da home — sem seleção de modo e sem sala.
+// ---------------------------------------------------------------------------
+
+test('"/" serve a home, com a seleção de modo — não a tela de jogo', async () => {
+  const html = await (await fetch(`${await baseUrl()}/`)).text();
+
+  assert.match(html, /Criar Nova Sala/, 'a home precisa ter o botão de criar sala');
+  assert.match(html, /name="modo" value="classico"/, 'a home precisa ter a escolha de modo');
+  assert.match(html, /name="modo" value="infinito"/);
+  assert.ok(!html.includes('class="tabuleiro"'), '"/" não pode entregar o tabuleiro');
+});
+
+test('"/sala/:id" serve a tela de jogo', async () => {
+  const html = await (await fetch(`${await baseUrl()}/sala/abc123`)).text();
+
+  assert.match(html, /class="tabuleiro"/);
+  assert.match(html, /id="entrada-overlay"/, 'a tela de entrada precisa vir junto');
+});
+
+test('entrarSala sem sala é recusado, em vez de criar uma sala fantasma', async (t) => {
+  const a = await conectar();
+  t.after(() => { a.close(); contas.clear(); });
+
+  const antes = Object.keys(salas).length;
+
+  a.emit('entrarSala', { nome: 'Ana' });
+  assert.match(await a.proximo('entradaRecusada'), /Sala não informada/);
+
+  a.emit('entrarSala', { salaId: '   ', nome: 'Ana' });
+  assert.match(await a.proximo('entradaRecusada'), /Sala não informada/);
+
+  assert.strictEqual(Object.keys(salas).length, antes, 'nenhuma sala pode ter sido criada');
+});
+
+test('dois jogadores na MESMA sala recebem símbolos diferentes', async (t) => {
+  const a = await conectar();
+  const b = await conectar();
+  t.after(() => { a.close(); b.close(); contas.clear(); });
+
+  const simboloA = (await entrar(a, 'mesma-sala', 'Ana')).simbolo;
+  const simboloB = (await entrar(b, 'mesma-sala', 'Bruno')).simbolo;
+
+  assert.notStrictEqual(simboloA, simboloB, 'os dois não podem ser X');
+  assert.deepStrictEqual([simboloA, simboloB].sort(), ['O', 'X']);
+
+  const estado = await b.proximo('estadoSala', e => e.jogadores.length === 2);
+  assert.strictEqual(estado.jogadores.length, 2, 'precisam estar na mesma sala');
 });

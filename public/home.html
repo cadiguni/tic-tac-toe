@@ -144,13 +144,102 @@
       opacity: 0.85;
       line-height: 1.35;
     }
+
+    /* Sessão / autenticação */
+    .sessao-barra {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      font-size: 0.9em;
+    }
+
+    .sessao-barra[hidden], #sessao-auth[hidden] { display: none; }
+
+    .auth-form {
+      margin-bottom: 20px;
+      padding: 18px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .auth-form input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.12);
+      color: white;
+      font-size: 1em;
+      font-family: inherit;
+      text-align: center;
+    }
+
+    .auth-form input::placeholder { color: rgba(255,255,255,0.55); }
+
+    .auth-form input:focus {
+      outline: none;
+      border-color: #4ecdc4;
+      background: rgba(255,255,255,0.18);
+    }
+
+    .auth-form .btn { width: 100%; }
+
+    .auth-link {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 6px;
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.75);
+      font-size: 0.82em;
+      font-family: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .auth-link:hover { color: white; }
+
+    .sessao-barra .auth-link { width: auto; margin: 0; }
+
+    .auth-erro {
+      margin: 10px 0 0;
+      padding: 9px;
+      border-radius: 7px;
+      background: rgba(255,107,107,0.2);
+      border: 1px solid rgba(255,107,107,0.45);
+      color: #ffd5d5;
+      font-size: 0.82em;
+    }
+
+    .auth-erro[hidden] { display: none; }
+
+    .selo {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 0.75em;
+      font-weight: bold;
+      background: rgba(76,175,80,0.3);
+      border: 1px solid rgba(76,175,80,0.65);
+      color: #b8f0ba;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>🎮 Jogo da Velha</h1>
     <p class="subtitle">Jogue online com seus amigos!</p>
-    
+
+    <div id="sessao-barra" class="sessao-barra" hidden></div>
+    <div id="sessao-auth" hidden></div>
+
     <div class="modos">
       <label class="modo-card ativo">
         <input type="radio" name="modo" value="classico" checked>
@@ -192,8 +281,69 @@
     </div>
   </div>
 
+  <script src="/auth.js"></script>
   <script>
     const criarSalaBtn = document.getElementById('criarSalaBtn');
+
+    // -----------------------------------------------------------------------
+    // Sessão
+    // -----------------------------------------------------------------------
+
+    const barraSessao = document.getElementById('sessao-barra');
+    const areaAuth = document.getElementById('sessao-auth');
+
+    function renderizarSessao(usuario) {
+      barraSessao.replaceChildren();
+      barraSessao.hidden = false;
+
+      if (usuario) {
+        // textContent: o nome vem do banco, mas nunca vai como HTML
+        const saudacao = document.createElement('span');
+        saudacao.textContent = `Olá, ${usuario.nomeExibicao} `;
+
+        const selo = document.createElement('span');
+        selo.className = 'selo';
+        selo.textContent = '✓ conta';
+        saudacao.appendChild(selo);
+
+        const sair = document.createElement('button');
+        sair.className = 'auth-link';
+        sair.textContent = 'Sair';
+        sair.addEventListener('click', async () => {
+          await Auth.logout();
+          renderizarSessao(null);
+        });
+
+        barraSessao.append(saudacao, sair);
+        areaAuth.hidden = true;
+        areaAuth.replaceChildren();
+        return;
+      }
+
+      const aviso = document.createElement('span');
+      aviso.textContent = 'Jogando como convidado — vitórias não contam no ranking.';
+
+      const entrar = document.createElement('button');
+      entrar.className = 'auth-link';
+      entrar.textContent = 'Entrar / criar conta';
+      entrar.addEventListener('click', () => {
+        if (!areaAuth.hidden) {
+          areaAuth.hidden = true;
+          return;
+        }
+        areaAuth.replaceChildren();
+        areaAuth.hidden = false;
+        Auth.montarFormulario(areaAuth, renderizarSessao);
+      });
+
+      barraSessao.append(aviso, entrar);
+    }
+
+    Auth.sessao().then(renderizarSessao);
+
+    // -----------------------------------------------------------------------
+    // Modo de jogo
+    // -----------------------------------------------------------------------
 
     function modoSelecionado() {
       return document.querySelector('input[name="modo"]:checked').value;

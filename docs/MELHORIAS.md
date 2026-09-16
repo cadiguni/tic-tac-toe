@@ -51,10 +51,11 @@ antiga **dele** some. Detalhes em [MODOS-DE-JOGO.md](MODOS-DE-JOGO.md).
 
 ### Infraestrutura
 
-- **`npm test` agora existe de verdade** — 18 testes com `node:test`
-  (10 de regras, 8 de integração de socket). Antes o script era
+- **`npm test` agora existe de verdade** — 37 testes com `node:test`
+  (10 de regras de jogo, 10 de senha/sessão, 17 de integração de socket e
+  roteamento), todos sem precisar de MongoDB. Antes o script era
   `echo "Error: no test specified" && exit 1`.
-- Índices no `Partida` para `vencedor`, `dataPartida` e `modo` — o ranking
+- Índices no `Partida` para `vencedorId`, `dataPartida` e `modo` — o ranking
   agregava com collection scan a cada fim de partida.
 - `/estatisticas` passou a rodar as 5 queries em `Promise.all` em vez de em série.
 - `GET /health` para healthcheck de container/orquestrador.
@@ -62,21 +63,103 @@ antiga **dele** some. Detalhes em [MODOS-DE-JOGO.md](MODOS-DE-JOGO.md).
 - `__dirname + '/public/...'` trocado por `path.join` (concatenação de path
   quebra em ambiente misto).
 
+### Autenticação (conta opcional)
+
+O ranking era uma string digitada num `prompt()` — qualquer um entrava como
+"Lucas" e as vitórias iam para a mesma linha. Agora existe conta de verdade, sem
+transformar o login em pedágio para jogar. Detalhes em
+[AUTENTICACAO.md](AUTENTICACAO.md).
+
+- Convidado joga na hora pelo link; conta é opcional e dá acesso ao ranking.
+- Senha com scrypt (`node:crypto`), sessão em cookie `httpOnly` assinado com HMAC.
+- Identidade resolvida no handshake do Socket.IO, a partir do mesmo cookie das
+  rotas HTTP — o nome mandado pelo cliente é ignorado quando há conta.
+- Ranking passou a filtrar `vencedorId != null`. Convidados ficam de fora, e as
+  partidas antigas saíram do ranking sozinhas: **nenhum dado foi apagado e não
+  houve migração**.
+- Rate limit de 10 tentativas por IP a cada 15 min no login e no cadastro.
+- Convidado não pode usar o nome de uma conta; contas têm selo `✓` na sala e no chat.
+- Os dois `prompt()` viraram uma tela de entrada de verdade (item 6 da lista
+  antiga), que lembra o último nome de convidado usado.
+- **Bug encontrado no caminho**: `public/ranking.html` fazia `fetch('/ranking')`
+  sem `Accept: application/json`, então recebia HTML e caía sempre no
+  "Erro ao carregar ranking" — a página nunca funcionou. Corrigido.
+- **XSS restante**: o `ranking.html` ainda montava nomes com `innerHTML`. Era o
+  mesmo problema já corrigido no `script.js`, mas nessa página tinha passado
+  batido. Agora usa DOM.
+
+### Automação de subida (back + front + banco)
+
+`npm run up` sobe a stack inteira num comando: confere o Docker, gera o
+`SESSION_SECRET`, sobe app e banco na ordem certa, espera o `/health` e imprime
+o link da rede interna.
+
+- `scripts/subir.js` e `scripts/parar.js` — em Node, não em `.sh`/`.bat`, para
+  ter o mesmo comportamento no Windows e no Linux.
+- **`docker-compose.yml` estava prestes a quebrar o login**: define
+  `NODE_ENV=production`, e o `SESSION_SECRET` recém-tornado obrigatório não era
+  passado para o container. Agora é exigido explicitamente pelo compose.
+- **A checagem do `SESSION_SECRET` era preguiçosa** — só estourava no primeiro
+  login, virando um 500 genérico. A documentação dizia que o servidor não subia
+  sem ele, o que era falso. Agora valida no boot (item 14 antigo resolvido junto).
+- `depends_on` com `condition: service_healthy` nos dois composes: acabou a
+  instrução de "se subir antes do Mongo, reinicie" que o DEPLOY.md dava.
+- Healthcheck do app via `/health` e do Mongo via `mongosh ping`.
+- **MongoDB não é mais publicado para a rede**: passou de `0.0.0.0:27017` para
+  `127.0.0.1:27017`. Antes, testar em rede interna deixava o banco aberto para
+  todo mundo na mesma rede, sem autenticação.
+- **mongo-express saiu do caminho padrão**: agora está atrás do profile `admin`
+  (`npm run painel`) e também só em `127.0.0.1`. As credenciais default
+  `admin`/`admin123` continuam ali, mas deixaram de ficar expostas por acidente
+  (item 15 antigo mitigado).
+- O script detecta o IP real da LAN abrindo um socket UDP e vendo a rota
+  escolhida, em vez de chutar entre os adaptadores virtuais de Docker/WSL/Hyper-V.
+- `deploy.sh` e `deploy.bat` viraram atalhos para o script único — os menus
+  interativos antigos ficariam quebrados com o compose novo.
+
+### Correção: a home nunca era servida
+
+Reportado ao testar em rede interna: abrindo `http://<ip>:3000` aparecia a tela
+de **jogo**, sem escolha de modo, com "Sala:" vazio — e dois jogadores que
+entravam pelo mesmo link caíam em salas diferentes, ambos como X.
+
+A causa estava no projeto desde antes desta rodada:
+
+```js
+app.use(express.static(PUBLIC_DIR));   // serve public/index.html em "/"
+...
+app.get('/', ...);                     // nunca era alcançado
+```
+
+O `express.static` serve `index.html` no diretório raiz por padrão, então `/`
+entregava a tela de jogo e a rota da home virava código morto. O efeito em
+cascata era o pior:
+
+1. Sem `/sala/:id` na URL, o cliente ficava com `salaId` vazio.
+2. O servidor, ao receber sala vazia, **inventava uma sala aleatória por
+   jogador** — por isso ninguém se encontrava e os dois eram X.
+3. O cliente continuava mandando `salaId: ''` nas jogadas, então o tabuleiro
+   nem respondia.
+
+Corrigido em três camadas:
+
+- `express.static(PUBLIC_DIR, { index: false })` — a raiz volta para a home.
+- O cliente redireciona para `/` quando a URL não é `/sala/:id`, em vez de
+  entrar numa sala fantasma.
+- O servidor **recusa** `entrarSala` sem sala, em vez de inventar uma.
+
+Quatro testes de regressão cobrem isso agora, inclusive um que verifica que dois
+jogadores na mesma sala recebem símbolos **diferentes**.
+
+> Vale registrar como passou: a verificação anterior conferiu que `/` respondia
+> `HTTP 200` com HTML, sem checar **qual** página voltava. Um 200 não prova que a
+> página certa foi servida.
+
 ---
 
 ## 🔴 Prioridade alta
 
-### 1. Não há autenticação — o ranking é só um campo de texto
-
-O "jogador" é uma string digitada no `prompt()`. Qualquer um pode entrar como
-"Lucas" e as vitórias vão para a mesma linha do ranking. Não existe noção de
-conta, e não dá para confiar em nada que o ranking diga.
-
-**Caminho sugerido**: identidade persistente por `localStorage` + um id assinado
-(cookie httpOnly assinado com `SESSION_SECRET`, que já está no `.env.example` e
-não é usado por nada). Login social (GitHub/Google) se a ideia for ranking sério.
-
-### 2. O estado só existe na memória de um processo
+### 1. O estado só existe na memória de um processo
 
 Reiniciar o servidor derruba todas as partidas. Rodar duas réplicas quebra o jogo
 (cada uma enxerga metade das salas). O `docker-compose` de hoje só funciona com
@@ -85,40 +168,60 @@ Reiniciar o servidor derruba todas as partidas. Rodar duas réplicas quebra o jo
 **Caminho sugerido**: `@socket.io/redis-adapter` + guardar o estado das salas no
 Redis. É o pré-requisito para qualquer escala horizontal.
 
-### 3. Sem cabeçalhos de segurança nem rate limit no HTTP
+### 2. Recuperação de senha não existe
 
-`helmet` e `express-rate-limit` não estão instalados. As rotas `/ranking`,
-`/estatisticas` e `/nova-sala` são abertas — `/nova-sala` em loop enche a memória
-de salas (o sweeper de 10 minutos ajuda, mas não impede o pico).
+Não há e-mail na conta: senha perdida é conta perdida, sem nenhum caminho de
+volta. Também não dá para trocar a senha nem o nome de exibição.
 
-### 4. O `.env` não é lido
+**Caminho sugerido**: campo de e-mail opcional + token de reset com validade
+curta. Exige decidir o envio (SMTP, Resend, etc.).
 
-Existe `.env.example` documentando `MONGODB_URI`, `SESSION_SECRET`,
-`CHAT_RATE_LIMIT`, `LOG_LEVEL` — mas `dotenv` não é dependência e nada carrega o
-arquivo. Fora do Docker, quem copiar o `.env.example` vai achar que configurou
-algo. Além disso, `CHAT_RATE_LIMIT`, `GAME_RATE_LIMIT`, `SESSION_SECRET` e
-`LOG_LEVEL` não são lidos em lugar nenhum do código.
+### 3. Sessão não é revogável individualmente
 
-**Caminho sugerido**: `require('dotenv').config()` no topo do `server.js` e usar
-as variáveis, ou remover do `.env.example` o que é ficção.
+Como não há store no servidor, a única forma de invalidar um token antes dos 30
+dias é trocar o `SESSION_SECRET` — o que derruba todas as sessões de todo mundo.
+Não há "sair de todos os dispositivos".
 
----
+**Caminho sugerido**: um campo `tokenVersion` no usuário, incluído na assinatura
+e incrementado no "sair de todos". Resolve sem precisar de store.
 
-## 🟡 Prioridade média
+### 4. Sem cabeçalhos de segurança nem rate limit geral no HTTP
 
-### 5. `server.js` faz coisa demais
+`helmet` e `express-rate-limit` não estão instalados. O rate limit por IP cobre
+só `/api/login` e `/api/registrar`. As rotas `/ranking`, `/estatisticas` e
+`/nova-sala` são abertas — `/nova-sala` em loop enche a memória de salas (o
+sweeper de 10 minutos ajuda, mas não impede o pico).
+
+Sem `helmet` não há CSP, e o projeto tem `<script>` inline nas páginas HTML, o
+que exigiria nonce ou mover os scripts para arquivos antes de ligar a CSP.
+
+### 5. O `.env` só é lido no caminho Docker
+
+O `docker compose` lê o `.env` sozinho para interpolar variáveis, então
+`npm run up` funciona. Mas rodar `npm start` ou `npm run dev` **direto na
+máquina** ignora o arquivo por completo — `dotenv` não é dependência e nada o
+carrega. Quem for desenvolver fora do Docker precisa exportar as variáveis na
+mão, sem nenhum aviso de que o `.env` está sendo ignorado.
+
+`CHAT_RATE_LIMIT`, `GAME_RATE_LIMIT` e `LOG_LEVEL` continuam não sendo lidos em
+lugar nenhum do código, nem no Docker.
+
+**Caminho sugerido**: o Node 22 tem `--env-file-if-exists=.env` embutido, o que
+resolve sem dependência nenhuma:
+
+```json
+"start": "node --env-file-if-exists=.env server.js",
+"dev": "node --env-file-if-exists=.env --watch server.js"
+```
+
+Depois, usar as variáveis restantes ou tirar do `.env.example` o que é ficção.
+
+### 6. `server.js` faz coisa demais
 
 ~420 linhas com rotas HTTP, handlers de socket, rate limit, persistência e
 gerenciamento de salas. `game/modos.js` já tirou as regras de lá; o próximo
 passo natural é separar `rooms/` (ciclo de vida das salas), `routes/` e
 `sockets/`.
-
-### 6. UX de entrada: dois `prompt()` em sequência
-
-O jogador é recebido por um `prompt()` de sala e outro de nome, sem validação
-visual — e um nome vazio recarrega a página. Uma tela de entrada dentro da sala
-(nome + modo + botão) resolveria, e ainda permitiria lembrar o nome no
-`localStorage` entre partidas.
 
 ### 7. Jogar contra o computador
 
@@ -153,12 +256,12 @@ XSS, histórico) não tem cobertura nenhuma.
 
 ## 🟢 Prioridade baixa / arrumação
 
-### 12. Inconsistências na documentação de deploy
+### 12. `railway.dockerfile` desatualizado
 
-`DEPLOY.md` afirma que `railway.dockerfile` foi removido, mas o arquivo continua
-no repositório — e usa `node:18` + `npm install --production`, enquanto o
-`Dockerfile` usa `node:20` + `npm ci --omit=dev`. Ou apaga, ou atualiza e para
-de dizer que foi removido.
+Usa `node:18` + `npm install --production`, enquanto o `Dockerfile` principal usa
+`node:20` + `npm ci --omit=dev`. O Railway consegue usar o Dockerfile principal
+direto, então este arquivo provavelmente deveria ser apagado. (O `DEPLOY.md`, que
+afirmava falsamente que ele já tinha sido removido, foi reescrito.)
 
 ### 13. `.gitignore` com lixo
 
@@ -166,29 +269,24 @@ A última linha é `git remote add origin https://github.com/cadiguni/tic-tac-to
 — um comando colado por engano. Inofensivo (ignora um arquivo com esse nome
 absurdo), mas é sujeira.
 
-### 14. `docker-compose.yml` sem `depends_on` no serviço `jogo`
+### 14. Credenciais padrão no mongo-express
 
-O `DEPLOY.md` documenta a solução ("se subir antes do Mongo, rode
-`docker compose restart jogo`") em vez de resolver. O `docker-compose.dev.yml`
-tem o `depends_on`; o de produção não. Com o `/health` recém-adicionado dá para
-usar `healthcheck` + `condition: service_healthy`.
+`admin`/`admin123` continuam como default. Hoje o serviço só sobe sob demanda
+(`npm run painel`) e só escuta em `127.0.0.1`, então o risco caiu bastante — mas
+se alguém publicar a porta 8081 num servidor, a senha padrão volta a ser um
+problema. Defina `ME_EXPRESS_USER` e `ME_EXPRESS_PASSWORD` no `.env`.
 
-### 15. Credenciais padrão no mongo-express
-
-`admin`/`admin123` como default, com a porta 8081 publicada. Aceitável em
-`localhost`, perigoso se esse compose for para um servidor exposto.
-
-### 16. Sem lint nem formatter
+### 15. Sem lint nem formatter
 
 Nenhum ESLint/Prettier. O código tem mistura de indentação (4 espaços no
 `server.js`, 2 no cliente) e de estilo de aspas.
 
-### 17. Sem shutdown gracioso
+### 16. Sem shutdown gracioso
 
 Não há handler de `SIGTERM`. O Docker manda SIGTERM, espera 10s e mata — conexões
 de socket e a gravação da partida em curso são cortadas no meio.
 
-### 18. Log sem estrutura
+### 17. Log sem estrutura
 
 `console.log` com emoji em tudo. Em produção, sem timestamp e sem nível, não dá
 para filtrar nem agregar. `pino` resolveria (e o `LOG_LEVEL` do `.env.example`

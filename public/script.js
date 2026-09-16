@@ -25,27 +25,24 @@ let estadoAtual = null;
 let reconectando = false;
 let entrou = false;
 
+// Identidade em uso: nome + se veio de uma conta (true) ou de convidado (false)
+let nome = null;
+let souConta = false;
+
 // Modo pedido na URL — só tem efeito se a sala ainda não existir no servidor.
 const modoSolicitado = new URLSearchParams(window.location.search).get('modo');
 
-// ---------------------------------------------------------------------------
-// Identificação da sala e do jogador
-// ---------------------------------------------------------------------------
+// A tela de jogo só faz sentido dentro de /sala/:id. Fora disso não há sala
+// para entrar — mandar para a home é melhor do que ficar numa sala fantasma.
+const partesDoCaminho = window.location.pathname.split('/').filter(Boolean);
+const salaId = partesDoCaminho[0] === 'sala' ? partesDoCaminho[1] : null;
 
-let salaId = window.location.pathname.split('/').pop();
-if (!salaId || salaId === '' || salaId === 'index.html') {
-  salaId = prompt('Digite o nome da sala (deixe vazio para criar nova):') || '';
-}
-
-let nome = (prompt('Digite seu nome:') || '').trim();
-if (!nome) {
-  alert('Nome é obrigatório!');
-  location.reload();
+if (!salaId) {
+  window.location.replace('/');
 }
 
 function atualizarSalaInfo() {
   salaIdEl.textContent = `Sala: ${salaId}`;
-  window.history.replaceState({}, '', `/sala/${salaId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +166,17 @@ function renderizarJogadores(jogadores) {
 
     // textContent (e não innerHTML) — o nome é digitado pelo jogador.
     const identificacao = document.createElement('span');
-    identificacao.textContent = `${jogador.nome} (${jogador.simbolo})`;
+    identificacao.textContent = `${jogador.nome} (${jogador.simbolo}) `;
+
+    // Distingue conta verificada de convidado: sem isso, um convidado poderia
+    // se passar por quem está no ranking.
+    const selo = document.createElement('span');
+    selo.className = jogador.conta ? 'selo selo-conta' : 'selo selo-convidado';
+    selo.textContent = jogador.conta ? '✓ conta' : 'convidado';
+    selo.title = jogador.conta
+      ? 'Conta registrada — as vitórias contam no ranking'
+      : 'Convidado — as vitórias não contam no ranking';
+    identificacao.appendChild(selo);
 
     const status = document.createElement('span');
     status.className = 'jogador-status';
@@ -217,37 +224,143 @@ socket.on('estadoSala', (estado) => {
 // ---------------------------------------------------------------------------
 
 function entrarNaSala() {
+  if (!nome) return; // ainda na tela de entrada
   socket.emit('entrarSala', { salaId, nome, modo: modoSolicitado });
 }
+
+// Reconexão deliberada para trocar de sessão — não é queda de conexão.
+let trocandoSessao = false;
 
 socket.on('connect', () => {
   atualizarConexaoStatus(true);
   if (reconectando) mostrarToast('Reconectado!', 'success');
   reconectando = false;
+  trocandoSessao = false;
   entrarNaSala();
 });
 
 socket.on('disconnect', () => {
   atualizarConexaoStatus(false);
+  if (trocandoSessao) return;
+
   reconectando = true;
   mostrarToast('Conexão perdida. Tentando reconectar...', 'error');
 });
 
-socket.on('atribuirSimbolo', ({ simbolo }) => {
+socket.on('atribuirSimbolo', ({ simbolo, nome: nomeConfirmado, conta }) => {
   meuSimbolo = simbolo;
   entrou = true;
+
+  // O servidor é quem decide o nome final (conta logada ignora o que foi digitado).
+  if (nomeConfirmado) nome = nomeConfirmado;
+  souConta = Boolean(conta);
+
   meuSimboloEl.textContent = `Você é: ${SIMBOLOS[simbolo]} ${simbolo}`;
+  fecharEntrada();
   if (estadoAtual) renderizarTurno(estadoAtual);
 });
 
 socket.on('entradaRecusada', (motivo) => {
-  alert(motivo);
-  window.location.href = '/';
+  nome = null;
+  entrou = false;
+  abrirEntrada(motivo);
 });
 
 socket.on('mensagem', (texto) => mostrarToast(texto, 'error'));
 
 atualizarSalaInfo();
+
+// ---------------------------------------------------------------------------
+// Tela de entrada (conta ou convidado)
+// ---------------------------------------------------------------------------
+
+const overlayEl = document.getElementById('entrada-overlay');
+const blocoLogado = document.getElementById('entrada-logado');
+const blocoConvidado = document.getElementById('entrada-convidado');
+const entradaNomeConta = document.getElementById('entrada-nome-conta');
+const entradaNome = document.getElementById('entrada-nome');
+const entradaErro = document.getElementById('entrada-erro');
+
+document.getElementById('entrada-sala').textContent = `Sala: ${salaId}`;
+
+function abrirEntrada(erro) {
+  overlayEl.hidden = false;
+  document.body.classList.add('com-overlay');
+
+  if (erro) {
+    entradaErro.textContent = erro;
+    entradaErro.hidden = false;
+  } else {
+    entradaErro.hidden = true;
+  }
+}
+
+function fecharEntrada() {
+  overlayEl.hidden = true;
+  document.body.classList.remove('com-overlay');
+}
+
+/** Mostra o bloco de conta logada ou o de convidado. */
+function aplicarSessao(usuario) {
+  blocoLogado.hidden = !usuario;
+  blocoConvidado.hidden = Boolean(usuario);
+
+  if (usuario) {
+    entradaNomeConta.textContent = usuario.nomeExibicao;
+  } else {
+    // Conveniência: lembra o último nome de convidado usado neste navegador
+    entradaNome.value = localStorage.getItem('ultimoNomeConvidado') || '';
+  }
+}
+
+/**
+ * A identidade do socket é resolvida no handshake, a partir do cookie. Como o
+ * login/logout pode ter acabado de acontecer nesta mesma tela, reconectamos
+ * antes de entrar para que o servidor releia o cookie atual.
+ */
+function jogarComo(nomeEscolhido) {
+  nome = nomeEscolhido;
+  trocandoSessao = true;
+  socket.disconnect();
+  socket.connect();
+}
+
+document.getElementById('entrada-jogar-conta').addEventListener('click', () => {
+  jogarComo(entradaNomeConta.textContent);
+});
+
+document.getElementById('entrada-jogar-convidado').addEventListener('click', () => {
+  const escolhido = entradaNome.value.trim();
+
+  if (!escolhido) {
+    entradaErro.textContent = 'Digite um nome para jogar.';
+    entradaErro.hidden = false;
+    return;
+  }
+
+  localStorage.setItem('ultimoNomeConvidado', escolhido);
+  jogarComo(escolhido);
+});
+
+entradaNome.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') document.getElementById('entrada-jogar-convidado').click();
+});
+
+document.getElementById('entrada-sair').addEventListener('click', async () => {
+  await Auth.logout();
+  aplicarSessao(null);
+});
+
+// Login/cadastro dentro da própria tela de entrada: autenticar já entra na sala.
+Auth.montarFormulario(document.getElementById('entrada-auth'), (usuario) => {
+  aplicarSessao(usuario);
+  jogarComo(usuario.nomeExibicao);
+});
+
+Auth.sessao().then(usuario => {
+  aplicarSessao(usuario);
+  abrirEntrada();
+});
 
 // ---------------------------------------------------------------------------
 // Ações do jogador
@@ -317,7 +430,7 @@ input.addEventListener('keypress', (e) => {
   }
 });
 
-socket.on('mensagemChat', ({ nome: remetente, texto }) => {
+socket.on('mensagemChat', ({ nome: remetente, texto, conta }) => {
   const p = document.createElement('p');
   const rotulo = document.createElement('strong');
 
@@ -329,7 +442,8 @@ socket.on('mensagemChat', ({ nome: remetente, texto }) => {
   } else {
     const souEu = remetente === nome;
     rotulo.style.color = souEu ? '#4ecdc4' : '#ff6b6b';
-    rotulo.textContent = souEu ? 'Você:' : `${remetente}:`;
+    rotulo.textContent = souEu ? 'Você:' : `${remetente}${conta ? ' ✓' : ''}:`;
+    rotulo.title = conta ? 'Conta registrada' : 'Convidado';
     p.append(rotulo, ` ${texto}`);
   }
 
@@ -445,6 +559,11 @@ socket.on('vitoria', ({ vencedor, euVenci, oponente }) => {
     mostrarToast('🏆 Você venceu!', 'success');
     somVitoria();
     adicionarAoHistorico('vitoria', oponente, modo);
+
+    // Momento certo para explicar por que a vitória não apareceu no ranking
+    if (!souConta) {
+      setTimeout(() => mostrarToast('Jogando como convidado — crie uma conta para contar no ranking.', 'info'), 3200);
+    }
   } else {
     mostrarToast('😔 Você perdeu!', 'error');
     somDerrota();

@@ -9,14 +9,32 @@ services:
       NODE_ENV: development
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/jogo-da-velha}
       PORT: 3000
+      # Em desenvolvimento o segredo é opcional: sem ele o servidor gera um
+      # temporário e avisa. As sessões caem a cada restart, o que é aceitável aqui.
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      COOKIE_SECURE: "false"
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
     command: npm run dev
+    restart: unless-stopped
 
   mongo:
     image: mongo:7
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  mongo_dev_data:

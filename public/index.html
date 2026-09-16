@@ -7,6 +7,34 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- Tela de entrada: substitui os prompts de nome/sala -->
+  <div id="entrada-overlay" class="overlay">
+    <div class="overlay-caixa">
+      <h2>🎮 Entrar na sala</h2>
+      <p id="entrada-sala" class="overlay-sub"></p>
+
+      <!-- Já logado -->
+      <div id="entrada-logado" hidden>
+        <p class="overlay-conta">Conectado como <strong id="entrada-nome-conta"></strong> ✓</p>
+        <button id="entrada-jogar-conta" class="btn btn-primary">Jogar</button>
+        <button id="entrada-sair" class="auth-link">Sair da conta</button>
+      </div>
+
+      <!-- Convidado -->
+      <div id="entrada-convidado" hidden>
+        <label class="overlay-label" for="entrada-nome">Seu nome</label>
+        <input type="text" id="entrada-nome" maxlength="20" placeholder="Como quer ser chamado?" autocomplete="nickname">
+        <button id="entrada-jogar-convidado" class="btn btn-primary">Jogar como convidado</button>
+        <p id="entrada-erro" class="auth-erro" hidden></p>
+
+        <div class="overlay-divisor"><span>ou</span></div>
+
+        <p class="overlay-nota">Contas aparecem no ranking. Convidados não.</p>
+        <div id="entrada-auth"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="game-container">
     <h1>🎮 Jogo da Velha</h1>
 
@@ -80,6 +108,7 @@
   </div> <!-- game-container -->
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/auth.js"></script>
   <script src="/script.js"></script>
 </body>
 </html>

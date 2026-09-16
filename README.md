@@ -12,57 +12,60 @@ Jogo da velha multiplayer em tempo real, com Node.js, Express, Socket.IO e Mongo
 O modo é escolhido na tela inicial, ao criar a sala. Detalhes das regras e da
 estratégia em [docs/MODOS-DE-JOGO.md](docs/MODOS-DE-JOGO.md).
 
+## Conta é opcional
+
+Quem recebe o link da sala **joga na hora, como convidado** — sem cadastro, sem
+tela de login no meio do caminho.
+
+Criar uma conta (usuário e senha) serve para uma coisa: **entrar no ranking**.
+Vitórias de convidado não são contabilizadas, e convidados não podem usar o nome
+de uma conta registrada. Detalhes em [docs/AUTENTICACAO.md](docs/AUTENTICACAO.md).
+
 ## Rodar local
 
 ```bash
 npm install
 npm start          # http://localhost:3000
 npm run dev        # com reload automático
-npm test           # 18 testes, não precisa de MongoDB
+npm test           # 37 testes, não precisa de MongoDB
 ```
 
-Precisa de um MongoDB acessível. Por padrão usa
-`mongodb://localhost:27017/jogo-da-velha`; para outro endereço, defina
-`MONGODB_URI`.
+Precisa de um MongoDB acessível (o `npm run up` acima já cuida disso). Por
+padrão usa `mongodb://localhost:27017/jogo-da-velha`; para outro endereço,
+defina `MONGODB_URI`.
 
-## Rodar com Docker
-
-### Stack completa (recomendado)
+Em produção, `SESSION_SECRET` é obrigatório — sem ele o servidor não sobe:
 
 ```bash
-docker compose up -d --build
+SESSION_SECRET=$(openssl rand -hex 32)
 ```
 
-- App: http://localhost:3000
-- Mongo Express: http://localhost:8081
-
-### Só a aplicação (MongoDB externo)
+## Subir tudo com um comando
 
 ```bash
-# Linux/macOS
-export MONGODB_URI="mongodb://localhost:27017/jogo-da-velha"
-
-# Windows (PowerShell)
-$env:MONGODB_URI="mongodb://localhost:27017/jogo-da-velha"
-
-docker compose up -d --build jogo
+npm run up
 ```
 
-### Desenvolvimento
+Confere o Docker, gera o `SESSION_SECRET`, sobe a aplicação e o MongoDB, espera
+o `/health` responder e imprime o link para a rede interna:
+
+```
+✓ No ar!
+
+  Neste computador   http://localhost:3000
+  Na rede interna    http://192.168.22.223:3000  ← mande este link
+```
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
+npm run up:dev          # modo desenvolvimento, com reload
+npm run logs            # acompanha os logs
+npm run painel          # mongo-express em http://localhost:8081
+npm run down            # para tudo, preservando o banco
+npm run down -- --tudo  # para tudo e apaga contas e partidas
 ```
 
-### Parar
-
-```bash
-docker compose down
-docker compose -f docker-compose.dev.yml down
-```
-
-Scripts auxiliares: `deploy.bat` (Windows) e `./deploy.sh` (Linux/macOS).
-Guia completo em [DEPLOY.md](DEPLOY.md).
+Front e back são o mesmo processo — o Express serve `public/` e o Socket.IO na
+mesma porta. Detalhes, rede interna e publicação em [DEPLOY.md](DEPLOY.md).
 
 ## Rotas
 
@@ -75,10 +78,15 @@ Guia completo em [DEPLOY.md](DEPLOY.md).
 | `/estatisticas` | estatísticas globais em JSON |
 | `/modos` | modos disponíveis em JSON |
 | `/health` | healthcheck |
+| `POST /api/registrar` | cria conta e já autentica |
+| `POST /api/login` | autentica |
+| `POST /api/logout` | encerra a sessão |
+| `GET /api/eu` | conta autenticada, ou `null` |
 
 ## Documentação
 
 - [docs/MODOS-DE-JOGO.md](docs/MODOS-DE-JOGO.md) — regras, estratégia e implementação dos modos
+- [docs/AUTENTICACAO.md](docs/AUTENTICACAO.md) — contas, sessão e o que fica fora do ranking
 - [docs/MELHORIAS.md](docs/MELHORIAS.md) — bugs conhecidos, dívidas técnicas e roadmap
 - [CLAUDE.md](CLAUDE.md) — arquitetura e convenções do código
 - [DEPLOY.md](DEPLOY.md) — deploy com Docker

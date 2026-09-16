@@ -6,7 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test --test-concurrency=1 \"test/*.test.js\""
+    "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
+    "up": "node scripts/subir.js",
+    "up:dev": "node scripts/subir.js --dev",
+    "down": "node scripts/parar.js",
+    "logs": "docker compose logs -f",
+    "logs:dev": "docker compose -f docker-compose.dev.yml logs -f",
+    "painel": "docker compose --profile admin up -d mongo-express"
   },
   "keywords": [
     "jogo-da-velha",

@@ -7,6 +7,15 @@ const { nanoid } = require('nanoid'); // 3.x — última linha compatível com r
 // Banco de dados
 const connectDB = require('./db/db');
 const Partida = require('./models/Partida');
+const Usuario = require('./models/Usuario');
+
+// Autenticação (conta opcional — convidado continua jogando sem cadastro)
+const rotasAuth = require('./auth/rotas');
+const { usuarioDoCookie, carregarUsuario } = require('./auth');
+const { verificarConfiguracao } = require('./auth/sessao');
+
+// Falha cedo e com mensagem clara, em vez de deixar o primeiro login virar 500
+verificarConfiguracao();
 
 // Regras de jogo (modo clássico e modo infinito)
 const {
@@ -37,7 +46,18 @@ const MS_SALA_VAZIA = 10 * 60000;       // sala sem jogadores é descartada depo
 const MAX_NOME = 20;
 const MAX_MENSAGEM = 200;
 
-app.use(express.static(PUBLIC_DIR));
+// Necessário para que o rate limit por IP enxergue o IP real atrás de proxy
+app.set('trust proxy', process.env.TRUST_PROXY === 'true');
+
+app.use(express.json({ limit: '10kb' }));
+
+// `index: false` é essencial: por padrão o express.static serve
+// public/index.html na raiz, o que sequestrava "/" e entregava a tela de JOGO
+// no lugar da home — sem seleção de modo e sem sala definida.
+app.use(express.static(PUBLIC_DIR, { index: false }));
+
+// Registro, login, logout e "quem sou eu"
+app.use('/api', carregarUsuario, rotasAuth);
 
 /** salaId -> { jogadores: [...], criadaEm: Date, jogo: EstadoJogo } */
 const salas = {};
@@ -107,7 +127,8 @@ function estadoPublico(sala, extras = {}) {
         jogadores: sala.jogadores.map(j => ({
             nome: j.nome,
             simbolo: j.simbolo,
-            online: j.online
+            online: j.online,
+            conta: Boolean(j.contaId) // convidado aparece com selo diferente
         })),
         ...extras
     };
@@ -122,25 +143,36 @@ function mensagemSistema(salaId, texto) {
     io.to(salaId).emit('mensagemChat', { nome: 'Sistema', texto });
 }
 
+/**
+ * Só partidas vencidas por uma conta entram no ranking. Convidados gravam
+ * `vencedorId: null` e ficam de fora, assim como as partidas anteriores à
+ * existência do login — por isso não há script de migração.
+ */
 function calcularRanking(modo) {
-    const filtro = { vencedor: { $ne: 'Empate' } };
+    const filtro = { vencedorId: { $ne: null } };
     if (modo) filtro.modo = modo;
 
     return Partida.aggregate([
         { $match: filtro },
-        { $group: { _id: '$vencedor', vitorias: { $sum: 1 } } },
+        { $group: { _id: '$vencedorId', vitorias: { $sum: 1 } } },
         { $sort: { vitorias: -1 } },
-        { $limit: 50 }
+        { $limit: 50 },
+        { $lookup: { from: 'usuarios', localField: '_id', foreignField: '_id', as: 'conta' } },
+        { $unwind: '$conta' },
+        { $project: { _id: '$conta.nomeExibicao', usuario: '$conta.usuario', vitorias: 1 } }
     ]);
 }
 
+/** @param vencedor jogador da sala que venceu, ou null em caso de empate. */
 async function registrarPartida(salaId, sala, vencedor) {
     try {
         await Partida.create({
             salaId,
             modo: sala.jogo.modo,
             jogadores: sala.jogadores.map(j => j.nome),
-            vencedor,
+            vencedor: vencedor ? vencedor.nome : 'Empate',
+            vencedorId: vencedor && vencedor.contaId ? vencedor.contaId : null,
+            jogadoresIds: sala.jogadores.filter(j => j.contaId).map(j => j.contaId),
             dataPartida: new Date(),
             duracao: Math.floor((Date.now() - sala.criadaEm.getTime()) / 1000),
             totalJogadas: sala.jogo.totalJogadas
@@ -244,18 +276,49 @@ app.get('/estatisticas', async (req, res) => {
 // Socket.IO
 // ---------------------------------------------------------------------------
 
+// A identidade vem do mesmo cookie usado pelas rotas HTTP, lido no handshake.
+// `socket.data.conta` fica null para convidado.
+io.use(async (socket, next) => {
+    socket.data.conta = await usuarioDoCookie(socket.handshake.headers.cookie);
+    next();
+});
+
 io.on('connection', (socket) => {
     console.log('Novo jogador conectado:', socket.id);
 
-    socket.on('entrarSala', ({ salaId, nome, modo }) => {
-        const nomeLimpo = sanitizarNome(nome);
-        if (!nomeLimpo) {
-            socket.emit('entradaRecusada', 'Nome inválido.');
-            return;
+    socket.on('entrarSala', async ({ salaId, nome, modo }) => {
+        const conta = socket.data.conta;
+        let nomeLimpo;
+        let contaId = null;
+
+        if (conta) {
+            // Logado: o nome vem da conta, não do que o cliente mandar.
+            nomeLimpo = conta.nomeExibicao;
+            contaId = conta._id.toString();
+        } else {
+            nomeLimpo = sanitizarNome(nome);
+            if (!nomeLimpo) {
+                socket.emit('entradaRecusada', 'Nome inválido.');
+                return;
+            }
+
+            // Convidado não pode usar o nome de uma conta registrada — senão
+            // daria para se passar por quem está no ranking.
+            try {
+                if (await Usuario.exists({ usuario: nomeLimpo.toLowerCase() })) {
+                    socket.emit('entradaRecusada', 'Esse nome pertence a uma conta. Faça login ou escolha outro.');
+                    return;
+                }
+            } catch (err) {
+                console.error('Erro ao checar nome de convidado:', err.message);
+            }
         }
 
+        // Inventar uma sala aleatória aqui era pior do que recusar: cada
+        // jogador caía numa sala diferente, achando que estava na mesma.
         if (!salaId || String(salaId).trim() === '') {
-            salaId = nanoid(6);
+            socket.emit('entradaRecusada', 'Sala não informada. Volte ao início e crie ou escolha uma sala.');
+            return;
         }
         salaId = String(salaId).trim().slice(0, 32);
 
@@ -265,7 +328,11 @@ io.on('connection', (socket) => {
         }
 
         const sala = salas[salaId];
-        const assento = sala.jogadores.find(j => j.nome === nomeLimpo);
+
+        // Conta reconecta pelo id; convidado, pelo nome.
+        const assento = contaId
+            ? sala.jogadores.find(j => j.contaId === contaId)
+            : sala.jogadores.find(j => !j.contaId && j.nome === nomeLimpo);
 
         if (assento) {
             // Só é reconexão se o assento estiver livre; senão é alguém tentando
@@ -282,7 +349,7 @@ io.on('connection', (socket) => {
             delete assento.desconectadoEm;
             socket.join(salaId);
 
-            socket.emit('atribuirSimbolo', { simbolo: assento.simbolo, salaId });
+            socket.emit('atribuirSimbolo', { simbolo: assento.simbolo, salaId, conta: Boolean(contaId), nome: nomeLimpo });
             mensagemSistema(salaId, `${nomeLimpo} reconectou como ${assento.simbolo}`);
         } else {
             if (sala.jogadores.length >= 2) {
@@ -298,6 +365,7 @@ io.on('connection', (socket) => {
             sala.jogadores.push({
                 id: socket.id,
                 nome: nomeLimpo,
+                contaId,
                 simbolo,
                 online: true,
                 timerRemocao: null,
@@ -305,7 +373,7 @@ io.on('connection', (socket) => {
             });
             socket.join(salaId);
 
-            socket.emit('atribuirSimbolo', { simbolo, salaId });
+            socket.emit('atribuirSimbolo', { simbolo, salaId, conta: Boolean(contaId), nome: nomeLimpo });
             mensagemSistema(salaId, `${nomeLimpo} entrou como ${simbolo}`);
             console.log(`Jogador ${nomeLimpo} entrou na sala ${salaId} como ${simbolo} (modo ${sala.jogo.modo})`);
         }
@@ -376,7 +444,7 @@ io.on('connection', (socket) => {
                 });
             });
 
-            registrarPartida(salaId, sala, jogador.nome);
+            registrarPartida(salaId, sala, jogador);
             agendarReinicio(salaId);
         } else if (empatou) {
             mensagemSistema(salaId, '🤝 Empate!');
@@ -387,7 +455,7 @@ io.on('connection', (socket) => {
                 });
             });
 
-            registrarPartida(salaId, sala, 'Empate');
+            registrarPartida(salaId, sala, null);
             agendarReinicio(salaId);
         }
     });
@@ -413,6 +481,7 @@ io.on('connection', (socket) => {
 
         io.to(salaId).emit('mensagemChat', {
             nome: jogador.nome,
+            conta: Boolean(jogador.contaId),
             texto: texto.trim().slice(0, MAX_MENSAGEM)
         });
     });

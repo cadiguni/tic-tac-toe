@@ -200,7 +200,8 @@
     async function carregarDados() {
       try {
         // Carregar ranking
-        const rankingResponse = await fetch('/ranking');
+        // O header é obrigatório: sem ele /ranking devolve a página HTML.
+        const rankingResponse = await fetch('/ranking', { headers: { Accept: 'application/json' } });
         const ranking = await rankingResponse.json();
         
         // Carregar estatísticas
@@ -228,23 +229,29 @@
             </div>
           `;
         } else {
-          rankingContent.innerHTML = ranking.map((player, index) => {
-            const position = index + 1;
-            let emoji = '';
-            
-            if (position === 1) emoji = '🥇';
-            else if (position === 2) emoji = '🥈';
-            else if (position === 3) emoji = '🥉';
-            else emoji = `${position}º`;
-            
-            return `
-              <div class="ranking-item">
-                <div class="position">${emoji}</div>
-                <div class="player-name">${player._id}</div>
-                <div class="victories">${player.vitorias} vitória${player.vitorias !== 1 ? 's' : ''}</div>
-              </div>
-            `;
-          }).join('');
+          // Montado por DOM, e não por innerHTML: o nome vem de dado de usuário.
+          rankingContent.replaceChildren();
+          const medalhas = ['🥇', '🥈', '🥉'];
+
+          ranking.forEach((player, index) => {
+            const item = document.createElement('div');
+            item.className = 'ranking-item';
+
+            const posicao = document.createElement('div');
+            posicao.className = 'position';
+            posicao.textContent = medalhas[index] || `${index + 1}º`;
+
+            const nome = document.createElement('div');
+            nome.className = 'player-name';
+            nome.textContent = player._id;
+
+            const vitorias = document.createElement('div');
+            vitorias.className = 'victories';
+            vitorias.textContent = `${player.vitorias} vitória${player.vitorias !== 1 ? 's' : ''}`;
+
+            item.append(posicao, nome, vitorias);
+            rankingContent.appendChild(item);
+          });
         }
         
       } catch (error) {
